@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#1d3a5c">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Controle de Gastos - Administrador</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icones/icone-192.png">
+  <link rel="apple-touch-icon" href="icones/icone-192.png">
+  <link rel="stylesheet" href="estilo.css">
+</head>
+<body>
+  <!-- ============ ENTRAR (senha do painel) ============ -->
+  <section id="tela-entrar" class="tela oculto">
+    <div class="entrar-adm">
+      <img src="icones/icone-192.png" alt="" class="icone">
+      <h1>Controle de Gastos</h1>
+      <div class="sub">Administrador <span class="versao" id="entrar-versao"></span></div>
+      <p>Área só do organizador. Entre com a senha do painel.</p>
+      <label for="ent-senha">Senha do painel</label>
+      <input id="ent-senha" type="password" autocomplete="current-password">
+      <label class="marcar"><input type="checkbox" id="ent-mostrar"> Mostrar senha</label>
+      <p class="erro-txt" id="ent-erro"></p>
+      <button class="botao primario grande" id="ent-entrar" type="button">Entrar</button>
+      <p style="font-size:13px;margin-top:18px">Este aparelho fica conectado até você tocar em <b>Sair</b>. Dá para desconectar de longe pelo outro aparelho (Mais &gt; Aparelhos conectados).</p>
+    </div>
+  </section>
+
+  <section id="tela-inicio" class="tela oculto">
+    <header class="topo">
+      <div class="topo-textos"><div class="topo-titulo">Administrador <span class="versao" id="ini-versao"></span></div><div class="topo-sub" id="ini-sub"></div></div>
+      <div class="topo-acoes"><button class="botao-icone sync ok" data-atualizar type="button" aria-label="Atualizar" title="Atualizar"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46A7.93 7.93 0 0 0 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74A7.93 7.93 0 0 0 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/></svg></button></div>
+    </header>
+    <div id="inicio-corpo"></div>
+  </section>
+  <section id="tela-lanc" class="tela oculto">
+    <header class="topo">
+      <div class="topo-textos"><div class="topo-titulo">Lançamentos</div><div class="topo-sub" id="lanc-sub"></div></div>
+      <div class="topo-acoes"><button class="botao-icone sync ok" data-atualizar type="button" aria-label="Atualizar" title="Atualizar"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46A7.93 7.93 0 0 0 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74A7.93 7.93 0 0 0 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/></svg></button></div>
+    </header>
+    <div id="lanc-corpo"></div>
+  </section>
+  <section id="tela-pessoas" class="tela oculto">
+    <header class="topo">
+      <div class="topo-textos"><div class="topo-titulo">Pessoas</div><div class="topo-sub" id="pessoas-sub"></div></div>
+      <div class="topo-acoes"><button class="botao-icone sync ok" data-atualizar type="button" aria-label="Atualizar" title="Atualizar"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46A7.93 7.93 0 0 0 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74A7.93 7.93 0 0 0 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/></svg></button></div>
+    </header>
+    <div id="pessoas-corpo"></div>
+  </section>
+  <section id="tela-veiculos" class="tela oculto">
+    <header class="topo">
+      <div class="topo-textos"><div class="topo-titulo">Veículos</div><div class="topo-sub" id="veiculos-sub"></div></div>
+      <div class="topo-acoes"><button class="botao-icone sync ok" data-atualizar type="button" aria-label="Atualizar" title="Atualizar"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46A7.93 7.93 0 0 0 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74A7.93 7.93 0 0 0 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/></svg></button></div>
+    </header>
+    <div id="veiculos-corpo"></div>
+  </section>
+  <section id="tela-mais" class="tela oculto">
+    <header class="topo"><div class="topo-textos"><div class="topo-titulo">Mais</div><div class="topo-sub">Controle de Gastos - Administrador</div></div><span></span></header>
+    <div id="mais-corpo"></div>
+  </section>
+  <section id="tela-lanc-ver" class="tela oculto">
+    <header class="topo">
+      <button class="botao-icone" data-voltar type="button" aria-label="Voltar">←</button>
+      <div class="topo-textos"><div class="topo-titulo" id="lanc-ver-titulo">Lançamento</div><div class="topo-sub" id="lanc-ver-sub"></div></div>
+      <span></span>
+    </header>
+    <div id="lanc-ver-corpo"></div>
+  </section>
+  <section id="tela-lanc-editar" class="tela oculto">
+    <header class="topo">
+      <button class="botao-icone" data-voltar type="button" aria-label="Voltar">←</button>
+      <div class="topo-textos"><div class="topo-titulo" id="lanc-editar-titulo">Editar lançamento</div><div class="topo-sub" id="lanc-editar-sub"></div></div>
+      <span></span>
+    </header>
+    <div id="lanc-editar-corpo"></div>
+  </section>
+  <section id="tela-pessoa" class="tela oculto">
+    <header class="topo">
+      <button class="botao-icone" data-voltar type="button" aria-label="Voltar">←</button>
+      <div class="topo-textos"><div class="topo-titulo" id="pessoa-titulo">Pessoa</div><div class="topo-sub" id="pessoa-sub"></div></div>
+      <span></span>
+    </header>
+    <div id="pessoa-corpo"></div>
+  </section>
+  <section id="tela-veiculo" class="tela oculto">
+    <header class="topo">
+      <button class="botao-icone" data-voltar type="button" aria-label="Voltar">←</button>
+      <div class="topo-textos"><div class="topo-titulo" id="veiculo-titulo">Veículo</div><div class="topo-sub" id="veiculo-sub"></div></div>
+      <span></span>
+    </header>
+    <div id="veiculo-corpo"></div>
+  </section>
+  <section id="tela-gasto" class="tela oculto">
+    <header class="topo">
+      <button class="botao-icone" data-voltar type="button" aria-label="Voltar">←</button>
+      <div class="topo-textos"><div class="topo-titulo" id="gasto-titulo">Gasto do veículo</div><div class="topo-sub" id="gasto-sub"></div></div>
+      <span></span>
+    </header>
+    <div id="gasto-corpo"></div>
+  </section>
+  <section id="tela-gasto-editar" class="tela oculto">
+    <header class="topo">
+      <button class="botao-icone" data-voltar type="button" aria-label="Voltar">←</button>
+      <div class="topo-textos"><div class="topo-titulo" id="gasto-editar-titulo">Editar gasto</div><div class="topo-sub" id="gasto-editar-sub"></div></div>
+      <span></span>
+    </header>
+    <div id="gasto-editar-corpo"></div>
+  </section>
+  <section id="tela-veiculo-editar" class="tela oculto">
+    <header class="topo">
+      <button class="botao-icone" data-voltar type="button" aria-label="Voltar">←</button>
+      <div class="topo-textos"><div class="topo-titulo" id="veiculo-editar-titulo">Editar veículo</div><div class="topo-sub" id="veiculo-editar-sub"></div></div>
+      <span></span>
+    </header>
+    <div id="veiculo-editar-corpo"></div>
+  </section>
+  <section id="tela-lixo" class="tela oculto">
+    <header class="topo">
+      <button class="botao-icone" data-voltar type="button" aria-label="Voltar">←</button>
+      <div class="topo-textos"><div class="topo-titulo" id="lixo-titulo">Excluídos</div><div class="topo-sub" id="lixo-sub"></div></div>
+      <span></span>
+    </header>
+    <div id="lixo-corpo"></div>
+  </section>
+  <section id="tela-melh" class="tela oculto">
+    <header class="topo">
+      <button class="botao-icone" data-voltar type="button" aria-label="Voltar">←</button>
+      <div class="topo-textos"><div class="topo-titulo" id="melh-titulo">Melhorias</div><div class="topo-sub" id="melh-sub"></div></div>
+      <span></span>
+    </header>
+    <div id="melh-corpo"></div>
+  </section>
+  <section id="tela-ia" class="tela oculto">
+    <header class="topo">
+      <button class="botao-icone" data-voltar type="button" aria-label="Voltar">←</button>
+      <div class="topo-textos"><div class="topo-titulo" id="ia-titulo">IA</div><div class="topo-sub" id="ia-sub"></div></div>
+      <span></span>
+    </header>
+    <div id="ia-corpo"></div>
+  </section>
+  <section id="tela-listas" class="tela oculto">
+    <header class="topo">
+      <button class="botao-icone" data-voltar type="button" aria-label="Voltar">←</button>
+      <div class="topo-textos"><div class="topo-titulo" id="listas-titulo">Listas</div><div class="topo-sub" id="listas-sub"></div></div>
+      <span></span>
+    </header>
+    <div id="listas-corpo"></div>
+  </section>
+  <section id="tela-convite" class="tela oculto">
+    <header class="topo">
+      <button class="botao-icone" data-voltar type="button" aria-label="Voltar">←</button>
+      <div class="topo-textos"><div class="topo-titulo" id="convite-titulo">Link de convite</div><div class="topo-sub" id="convite-sub"></div></div>
+      <span></span>
+    </header>
+    <div id="convite-corpo"></div>
+  </section>
+  <section id="tela-aparelhos" class="tela oculto">
+    <header class="topo">
+      <button class="botao-icone" data-voltar type="button" aria-label="Voltar">←</button>
+      <div class="topo-textos"><div class="topo-titulo" id="aparelhos-titulo">Aparelhos conectados</div><div class="topo-sub" id="aparelhos-sub"></div></div>
+      <span></span>
+    </header>
+    <div id="aparelhos-corpo"></div>
+  </section>
+
+  <!-- barra de baixo (no computador, fica na lateral) -->
+  <nav class="nav oculto" id="nav">
+    <div class="nav-marca">Controle de Gastos<br>Administrador <span class="versao" id="nav-versao"></span></div>
+    <button type="button" data-aba="inicio"><span class="i">🏠</span>Início<span class="badge" id="nb-inicio"></span></button>
+    <button type="button" data-aba="lanc"><span class="i">🧾</span>Lançamentos<span class="badge" id="nb-lanc"></span></button>
+    <button type="button" data-aba="pessoas"><span class="i">👥</span>Pessoas<span class="badge" id="nb-pessoas"></span></button>
+    <button type="button" data-aba="veiculos"><span class="i">🚗</span>Veículos<span class="badge" id="nb-veiculos"></span></button>
+    <button type="button" data-aba="mais"><span class="i">☰</span>Mais<span class="badge" id="nb-mais"></span></button>
+    <button type="button" class="nav-extra" data-ir="lixo"><span class="i">🗑️</span>Excluídos<span class="badge" id="nb-lixo"></span></button>
+    <button type="button" class="nav-extra" data-ir="melh"><span class="i">🐞</span>Melhorias<span class="badge" id="nb-melh"></span></button>
+    <button type="button" class="nav-extra" data-ir="ia"><span class="i">🤖</span>IA<span class="badge" id="nb-ia"></span></button>
+  </nav>
+
+  <div id="janela"></div>
+  <div id="carregando" class="carregando-adm oculto"></div>
+  <div id="toast" class="toast oculto"></div>
+
+  <script src="config.js"></script>
+  <script src="trava.js"></script>
+  <script src="gravador.js"></script>
+  <script src="admin.js"></script>
+</body>
+</html>
