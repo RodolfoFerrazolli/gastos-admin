@@ -8,7 +8,7 @@
 //  o 🐞 de pedido de correção ou melhoria; a bolinha branca em cima de
 //  "Filtros" saiu; com uma janela aberta, a tela de trás não rola.
 // =====================================================================
-const VERSAO_ADMIN = '2';
+const VERSAO_ADMIN = '3';
 
 (() => {
   'use strict';
@@ -141,6 +141,7 @@ const VERSAO_ADMIN = '2';
       throw e;
     }
     if (r && r.versaoServidor) INFO.versaoServidor = r.versaoServidor;
+    if (r && r.dataServidor) INFO.dataServidor = r.dataServidor; // v3: "servidor v10 · 21/11"
     return r;
   }
   async function chamar(fn, ...args) {
@@ -301,10 +302,8 @@ const VERSAO_ADMIN = '2';
     const ia = filaIA().length;
     const pon = (id, n) => { const el = $(id); if (el) { el.textContent = n ? String(n) : ''; el.classList.toggle('zero', !n); } };
     pon('nb-pessoas', ped);
-    pon('nb-mais', melh + (D.ia.erros || 0));
-    pon('nb-lixo', lixo);
-    pon('nb-melh', melh);
-    pon('nb-ia', ia);
+    pon('nb-mais', melh + (D.ia.erros || 0)); // v3: Excluídos, Melhorias e IA ficam só dentro de Mais
+    void lixo; void ia;
   }
 
   // ------------------------------------------------------------------
@@ -333,7 +332,7 @@ const VERSAO_ADMIN = '2';
     $('nav').classList.toggle('oculto', !comNav);
     document.body.classList.toggle('com-nav', comNav);
     const aba = RAIZES.includes(tela) ? tela : (ABA_DE[tela] || '');
-    const naLateral = window.matchMedia && window.matchMedia('(min-width: 900px)').matches && !!document.querySelector(`#nav [data-ir="${tela}"]`);
+    const naLateral = false; // v3: a lateral não tem mais atalhos próprios (Excluídos, Melhorias e IA ficam em Mais)
     document.querySelectorAll('#nav [data-aba]').forEach(b => b.classList.toggle('ativa', b.dataset.aba === aba && !naLateral));
     document.querySelectorAll('#nav [data-ir]').forEach(b => b.classList.toggle('ativa', b.dataset.ir === tela));
     if (!desenhar()) return;
@@ -361,8 +360,8 @@ const VERSAO_ADMIN = '2';
   function voltar() { history.back(); }
   window.addEventListener('popstate', (e) => {
     if (ignorarPop) { ignorarPop--; return; }
+    if (visorAberto()) { fecharVisor(false); return; } // v3: a foto pode estar por cima de uma janela (ℹ️ do veículo)
     if (janelaAberta) { fecharJanela(true, true); return; }
-    if (visorAberto()) { fecharVisor(false); return; }
     if (TELA === 'entrar') return;
     const st = e.state || { tela: 'inicio', d: 0 };
     if (abaPendente && (st.d || 0) === 0) {
@@ -474,6 +473,14 @@ const VERSAO_ADMIN = '2';
       setTimeout(() => inp.focus(), 50);
     });
   }
+
+  // ---- v3: nome comercial do celular (o servidor procura na lista do Google Play) ----
+  /** "Samsung Galaxy S24+ <small>SM-S926B</small>" (sem o nome: só o código). */
+  function celularHtml(nome, codigo, padrao = 'Celular') {
+    if (nome) return esc(nome) + (codigo ? ` <small class="cod-cel">${esc(String(codigo).split(' · ')[0])}</small>` + (String(codigo).indexOf(' · ') > 0 ? esc(String(codigo).slice(String(codigo).indexOf(' · '))) : '') : '');
+    return esc(codigo || padrao);
+  }
+  function celularTexto(a) { return a ? (a.modeloNome ? `${a.modeloNome} (${a.modelo})` : (a.modelo || '')) : ''; }
 
   // ---- fotos e áudios (vêm do Drive pelo servidor) ----
   const cacheArq = {};
@@ -664,7 +671,7 @@ const VERSAO_ADMIN = '2';
   }
   const ROT_FILTRO = {
     de: (v) => 'desde ' + dataDia(v), ate: (v) => 'até ' + dataDia(v), part: (v) => v, cat: (v) => v, meio: (v) => v,
-    apar: (v) => { const a = D.aparelhos.find(x => x.aparelhoId === v); return a ? (a.modelo || a.nomeInformado || 'aparelho') : 'aparelho'; },
+    apar: (v) => { const a = D.aparelhos.find(x => x.aparelhoId === v); return a ? (a.modeloNome || a.modelo || a.nomeInformado || 'aparelho') : 'aparelho'; },
     sit: (v) => ({ confirmado: 'Confirmados', revisar: 'Para revisar', aguardando_ia: 'Aguardando IA', erro_ia: 'Erro na IA', excluido: 'Excluídos' }[v] || v),
     fonte: (v) => ({ nota: 'Só notas fiscais', sefaz: 'QR Code (SEFAZ)', ia: 'IA (foto)', 'sefaz+ia': 'SEFAZ + IA', pendente: 'Notas não lidas' }[v] || v)
   };
@@ -741,7 +748,7 @@ const VERSAO_ADMIN = '2';
     const html = '<h3>Filtros</h3>' +
       `<div class="grade2"><div><label for="ff-de">De</label><input type="date" id="ff-de" value="${esc(F.de)}"></div><div><label for="ff-ate">Até</label><input type="date" id="ff-ate" value="${esc(F.ate)}"></div></div>` +
       `<label for="ff-part">Participante</label><select id="ff-part">${opcoesHtml(vs(unicos(L.map(l => l.participante))), F.part, 'Todos')}</select>` +
-      `<div class="grade2"><div><label for="ff-apar">Aparelho</label><select id="ff-apar">${opcoesHtml(D.aparelhos.map(a => ({ valor: a.aparelhoId, rotulo: (a.nomeInformado || '—') + ' · ' + (a.modelo || a.aparelhoId.slice(0, 8)) })), F.apar, 'Todos')}</select></div>` +
+      `<div class="grade2"><div><label for="ff-apar">Aparelho</label><select id="ff-apar">${opcoesHtml(D.aparelhos.map(a => ({ valor: a.aparelhoId, rotulo: (a.nomeInformado || '—') + ' · ' + (celularTexto(a) || a.aparelhoId.slice(0, 8)) })), F.apar, 'Todos')}</select></div>` +
       `<div><label for="ff-cat">Categoria</label><select id="ff-cat">${opcoesHtml(vs(unicos(D.listas.categorias.concat(L.map(l => l.categoria)))), F.cat, 'Todas')}</select></div></div>` +
       `<div class="grade2"><div><label for="ff-meio">Pagamento</label><select id="ff-meio">${opcoesHtml(vs(unicos(D.listas.meios.concat(L.map(l => l.meioPagamento)))), F.meio, 'Todos')}</select></div>` +
       `<div><label for="ff-sit">Situação</label><select id="ff-sit">${opcoesHtml([['confirmado', 'Confirmados'], ['revisar', 'Para revisar'], ['aguardando_ia', 'Aguardando IA'], ['erro_ia', 'Erro na IA'], ['excluido', 'Excluídos']].map(x => ({ valor: x[0], rotulo: x[1] })), F.sit, 'Todas (menos excluídos)')}</select></div></div>` +
@@ -771,7 +778,7 @@ const VERSAO_ADMIN = '2';
     const l = lancPorId(id);
     if (!l) return false;
     const arqs = D.arquivos[id] || [];
-    $('lanc-ver-sub').textContent = l.participante + (l.aparelhoId ? ' · ' + ((D.aparelhos.find(a => a.aparelhoId === l.aparelhoId) || {}).modelo || 'celular') : '');
+    $('lanc-ver-sub').textContent = l.participante + (l.aparelhoId ? ' · ' + (celularTexto(D.aparelhos.find(a => a.aparelhoId === l.aparelhoId)) || 'celular') : '');
     const lin = (a, b) => b ? `<div class="lin"><span>${a}</span><span>${b}</span></div>` : '';
     let html = `<div class="vtopo"><div class="linha1"><div class="n">${esc(l.descricao || '(sem descrição)')}</div><b>${brl(l.valorTotal)}</b></div>` +
       `<div class="s">${dataHora(l.dataHora)} · ${seloSit(l)} ${seloFonte(l)}</div>${l.excluido ? `<div style="margin-top:6px">${prazoHtml(l.excluidoEm)}</div>` : ''}</div>`;
@@ -783,14 +790,19 @@ const VERSAO_ADMIN = '2';
     if (l.origem === 'foto') {
       html += lin('Dados lidos de', esc(FONTE[l.fonteDados] || (l.status === 'aguardando_ia' ? 'ainda não lida' : '—'))) +
         lin('Chave da nota', l.chaveNota ? `<small>${esc(l.chaveNota.replace(/(\d{4})(?=\d)/g, '$1 '))}</small>` : '') +
+        lin('Leitura na SEFAZ', esc(l.motivoSefaz || '')) + // v3: por que veio (ou não) do site da SEFAZ
         lin('QR Code', l.qrNota ? (/^https?:\/\/[^\/?#]*\.gov\.br(\/|$)/i.test(l.qrNota) ? `<a target="_blank" rel="noopener" href="${esc(l.qrNota)}">abrir a nota na SEFAZ</a>` : '<small>' + esc(l.qrNota.slice(0, 80)) + '</small>') : 'não encontrado');
     }
     html += lin('Transcrição', esc(l.transcricao)) + lin('Observação da IA', esc(l.observacaoIA)) + lin('Criado em', dataHora(l.criadoEm)) +
       lin('Alterado em', dataHora(l.alteradoEm) + (l.alteradoPor ? ' por ' + esc(l.alteradoPor) : '')) + '</div>';
     if ((l.itens || []).length) {
       html += '<div class="caixa"><h4>Itens</h4>' + l.itens.map(i => {
-        const q = i.qtd != null && i.qtd !== 1 ? String(Math.round(i.qtd * 1000) / 1000).replace('.', ',') + ' × ' : '';
-        const u = i.qtd != null && i.qtd !== 1 && i.unitario != null ? ` <small class="dica-txt">(${brlUnit(i.unitario)} cada)</small>` : '';
+        // v3: por peso: "0,194 kg × R$ 35,99 o kg"
+        const peso = i.unidade && i.unidade !== 'un' && i.qtd != null;
+        const qt = i.qtd != null ? String(Math.round(i.qtd * 1000) / 1000).replace('.', ',') : '';
+        const q = peso ? '' : (i.qtd != null && i.qtd !== 1 ? qt + ' × ' : '');
+        const u = peso ? ` <small class="dica-txt">(${qt} ${esc(i.unidade)}${i.unitario != null ? ' × ' + brlUnit(i.unitario) + ' o ' + esc(i.unidade) : ''})</small>`
+          : (i.qtd != null && i.qtd !== 1 && i.unitario != null ? ` <small class="dica-txt">(${brlUnit(i.unitario)} cada)</small>` : '');
         return `<div class="lin"><span>${q}${esc(i.nome || '(sem nome)')}${u}</span><b>${i.valor != null ? brl(i.valor) : ''}</b></div>`;
       }).join('') + '</div>';
     }
@@ -1009,7 +1021,7 @@ const VERSAO_ADMIN = '2';
       (c.whatsapp ? `<a class="dica-txt" target="_blank" rel="noopener" href="${esc(linkZap(c.whatsapp))}">abrir conversa no WhatsApp</a>` : '') +
       `<label for="pe-email">E-mail</label><div class="edit-lin"><input id="pe-email" type="email" placeholder="nome@gmail.com" value="${esc(c.email || '')}"><button type="button" data-salvar="email">Salvar</button></div></div>`;
     html += '<div class="caixa"><h4>Celulares</h4>' + (c.aparelhos.length ? c.aparelhos.map(a =>
-      `<div class="lin"><div>${esc(a.modelo || 'Celular')}${a.android ? ' · Android ' + esc(a.android) : ''}<div class="sub">último contato ${quandoCurto(a.ultimoUso)}${a.versaoApp ? ' · app ' + esc(a.versaoApp) : ''}</div></div>` +
+      `<div class="lin"><div>${celularHtml(a.modeloNome, a.modelo)}${a.android ? ' · Android ' + esc(a.android) : ''}<div class="sub">último contato ${quandoCurto(a.ultimoUso)}${a.versaoApp ? ' · app ' + esc(a.versaoApp) : ''}</div></div>` +
       (a.conectado ? `<button class="botao pequeno" type="button" data-desconectar="${esc(a.aparelhoId)}">Desconectar</button>` : '<span class="sub">desconectado</span>') + '</div>').join('')
       : '<p class="dica-txt">Nenhum celular.</p>') + '</div>';
     html += '<div class="det">' +
@@ -1131,6 +1143,29 @@ const VERSAO_ADMIN = '2';
       `<div class="meta"><span class="quem">${esc(primeiroNome(String(r.participante || '').replace(/\s*\(conta excluída\)$/, '')))}${/\(conta excluída\)$/.test(r.participante || '') ? ' (excluída)' : ''}</span>${esc(meta)}${fotos ? ' · 📷' + (fotos > 1 ? fotos : '') : ''}</div></div>` +
       `<div class="direita"><span class="valor">${r.tipo === 'galeria' ? '📷' : brl(r.valor)}</span>${r.status && r.status !== 'confirmado' ? seloSit(r) : ''}</div></div>`;
   }
+  /** v3: ℹ️ do veículo (folha de baixo): o cadastro todo e as fotos. */
+  function infoVeiculo(v) {
+    const comps = (D.compartilhamentos || []).filter(c => c.veiculoId === v.id);
+    const fotos = (D.arquivos[v.id] || []).filter(a => a.tipo === 'foto');
+    const lin = (r, val) => `<div class="lin"><span>${r}</span><span>${val || '<span class="dica-txt">—</span>'}</span></div>`;
+    const j = abrirJanela('<h3>ℹ️ Informações do veículo</h3><div class="det info-veic">' +
+      lin('Montadora', esc(v.montadora)) + lin('Modelo', esc(v.modelo)) + lin('Ano', v.ano ? esc(String(v.ano)) : '') + lin('Placa', esc(v.placa)) +
+      lin('Cor', esc(v.cor)) + lin('Observação', v.observacao ? `<span class="info-obs">${esc(v.observacao)}</span>` : '') + lin('Dono', esc(v.participante)) +
+      lin('Compartilhado com', comps.length ? comps.map(c => esc(c.nome) + (c.situacao === 'pendente' ? ' <small>(pendente)</small>' : '')).join(', ') : 'ninguém') +
+      lin('Cadastrado em', v.criadoEm ? dataHora(v.criadoEm) : '') + '</div>' +
+      `<div class="secao" style="margin:14px 0 6px">Fotos</div>` +
+      (fotos.length ? '<div class="fotos-veic">' + fotos.map(a => `<button class="anexo" type="button" data-arq="${esc(a.driveId)}" data-tipo="foto">📷<small>carregando…</small></button>`).join('') + '</div>'
+        : '<p class="dica-txt">Nenhuma foto.</p>') +
+      '<div class="botoes-j"><button class="botao primario" type="button" data-fechar-info>Fechar</button></div>', { deBaixo: true });
+    j.querySelector('[data-fechar-info]').onclick = () => fecharJanela();
+    // as miniaturas vão aparecendo (cada foto vem do Drive)
+    j.querySelectorAll('[data-arq]').forEach(async (b) => {
+      try { const src = await baixarArquivo(b.dataset.arq); if (b.isConnected) b.innerHTML = `<img src="${src}" alt="foto do veículo">`; }
+      catch (e) { if (b.isConnected) b.innerHTML = '📷<small>tocar para ver</small>'; }
+    });
+  }
+  $('veiculo-info').onclick = () => { const v = veiculoPorId(DADOS.id); if (v) infoVeiculo(v); };
+
   RENDER.veiculo = ({ id }) => {
     const v = veiculoPorId(id);
     if (!v || v.excluido) return false;
@@ -1323,11 +1358,27 @@ const VERSAO_ADMIN = '2';
       `<a target="_blank" rel="noopener" href="${esc(INFO.urlPlanilha || '#')}"><span class="ic">📊</span>Abrir a planilha<span class="x">↗</span></a>` +
       `<a target="_blank" rel="noopener" href="${esc(INFO.urlPasta || '#')}"><span class="ic">📁</span>Abrir a pasta no Drive<span class="x">↗</span></a></div>` +
       '<div class="menu-lista"><button type="button" data-sair class="sair"><span class="ic">🚪</span>Sair deste aparelho</button></div>' +
-      `<p class="dica-txt" style="text-align:center">Administrador v${VERSAO_ADMIN} · servidor v${esc(INFO.versaoServidor || '?')}</p>`;
+      `<p class="dica-txt" style="text-align:center">Administrador v${VERSAO_ADMIN} · servidor v${esc(INFO.versaoServidor || '?')}${INFO.dataServidor ? ' · ' + esc(INFO.dataServidor) : ''}</p>`;
+    // v3: Segurança (a digital deste celular)
+    if (Digital.celular() && Digital.disponivelCache !== false) {
+      const sec = document.createElement('div');
+      sec.innerHTML = '<div class="secao">Segurança</div><div class="menu-lista"><button type="button" data-digital><span class="ic">👆</span>Entrar com a digital' +
+        `<span class="x">neste celular <span class="interruptor${Digital.ligada() ? ' on' : ''}" role="switch" aria-checked="${Digital.ligada()}"></span></span></button></div>`;
+      $('mais-corpo').insertBefore(sec, $('mais-corpo').firstChild);
+    }
   };
   $('mais-corpo').addEventListener('click', async (e) => {
     const b = e.target.closest('[data-ir]');
     if (b) { ir(b.dataset.ir); return; }
+    if (e.target.closest('[data-digital]')) {
+      if (Digital.ligada()) {
+        if (!(await confirmar('Desligar a digital neste celular? Ao abrir o app, vai pedir a senha do painel.', 'Desligar'))) return;
+        Digital.desligar();
+        aviso('Digital desligada neste celular.');
+      } else if (await Digital.cadastrar()) aviso('Pronto! Nas próximas vezes, é só a digital.', 3500);
+      redesenhar();
+      return;
+    }
     if (e.target.closest('[data-sair]')) {
       if (!(await confirmar('Sair deste aparelho? Para entrar de novo, é preciso a senha do painel.', 'Sair'))) return;
       try { await api('sair'); } catch (err) { /* sai assim mesmo */ }
@@ -1377,19 +1428,35 @@ const VERSAO_ADMIN = '2';
     html += lista.length ? lista.map(m => `<div class="melh${melhoriaConcluida(m) ? ' concluida' : ''}" data-melh="${esc(m.id)}">` +
       `<div class="cab">Pedido nº ${m.numero} <span class="selo ${cls[m.situacao] || ''}">${esc(m.situacao)}</span></div>` +
       `<div class="m-tela">${m.tela ? 'Tela #' + esc(m.tela) + ' ' : ''}${esc(m.nomeTela || 'tela não identificada')} · ${esc(m.participante)} · ${quandoCurto(m.criadoEm)}` +
-      `${m.versaoApp ? ' · app v' + esc(m.versaoApp) : ''}${m.aparelho ? ' · ' + esc(m.aparelho) : ''}${m.janela ? ' · janela: “' + esc(m.janela) + '”' : ''}</div>` +
+      `${m.versaoApp ? ' · app v' + esc(m.versaoApp) : ''}${m.aparelho ? ' · ' + celularHtml(m.aparelhoNome, m.aparelho) : ''}${m.janela ? ' · janela: “' + esc(m.janela) + '”' : ''}</div>` +
       (m.texto ? `<div class="m-txt">✍️ ${esc(m.texto)}</div>` : '') +
-      (m.transcricao ? `<div class="m-txt">🎤 “${esc(m.transcricao)}”</div>` : m.audioId ? `<div class="dica-txt">${m.iaErro ? '<span style="color:var(--vermelho)">' + esc(m.iaErro) + '</span> ' : 'Transcrição ainda não feita. '}</div>` : '') +
-      '<div class="m-midia" data-midia></div><div class="bts">' +
-      (m.imagemId ? '<button class="botao pequeno" type="button" data-carregar="imagem">🖼️ Ver a tela</button>' : '') +
+      // v3: só a transcrição dá para selecionar (e copiar)
+      (m.transcricao ? `<div class="m-txt selecionavel">🎤 “${esc(m.transcricao)}”</div>` : m.audioId ? `<div class="dica-txt">${m.iaErro ? '<span style="color:var(--vermelho)">' + esc(m.iaErro) + '</span> ' : 'Transcrição ainda não feita. '}</div>` : '') +
+      '<div class="m-fotos oculto" data-fotos></div><div class="m-midia" data-midia></div><div class="bts">' +
+      (nImagens(m) ? `<button class="botao pequeno" type="button" data-carregar="imagens">🖼️ ${nImagens(m) > 1 ? 'Ver as imagens (' + nImagens(m) + ')' : (m.imagemId ? 'Ver a tela' : 'Ver a foto')}</button>` : '') +
       (m.audioId ? '<button class="botao pequeno" type="button" data-carregar="audio">▶️ Ouvir</button>' : '') +
       (m.audioId && !m.transcricao ? '<button class="botao pequeno" type="button" data-transcrever>📝 Transcrever o áudio</button>' : '') + '</div>' +
       `<div class="grade2"><div><label>Situação</label><select data-situacao>${['Novo', 'Em andamento', 'Resolvido', 'Descartado'].map(x => `<option${x === m.situacao ? ' selected' : ''}>${x}</option>`).join('')}</select></div>` +
       `<div><label>Anotação</label><input data-anotacao placeholder="só você vê" value="${esc(m.anotacao || '')}"></div></div>` +
+      // v3: quem pediu vê no app (Resolvido: mensagem opcional; Descartado: o motivo, obrigatório)
+      `<div class="m-resposta${melhoriaConcluida(m) ? '' : ' oculto'}" data-resposta-caixa><label data-resposta-rotulo>${rotuloResposta(m.situacao)}</label>` +
+      `<textarea data-resposta rows="2" maxlength="1000" placeholder="${m.situacao === 'Descartado' ? 'Explique por que não vai ser feito' : 'Ex.: Arrumado na versão nova!'}">${esc(m.resposta || '')}</textarea>` +
+      '<p class="dica-txt">Quem pediu vê esta mensagem no app, junto com o aviso.</p></div>' +
       '<div class="acoes" style="margin:12px 0 0"><button class="botao pequeno perigo" type="button" data-excluir-melh>Excluir</button><button class="botao pequeno primario" type="button" data-salvar-melh>Salvar</button></div></div>').join('')
       : `<div class="vazio-adm">${MF === 'pendentes' ? 'Nenhum pedido pendente.' : 'Nenhum pedido aqui.'}</div>`;
     $('melh-corpo').innerHTML = html;
   };
+  function nImagens(m) { return (m.imagemId ? 1 : 0) + (Number(m.fotos) || 0); }
+  function rotuloResposta(sit) { return sit === 'Descartado' ? 'Motivo (obrigatório)' : 'Mensagem para quem pediu (opcional)'; }
+  $('melh-corpo').addEventListener('change', (e) => {
+    const sel = e.target.closest('[data-situacao]');
+    if (!sel) return;
+    const caixa = sel.closest('[data-melh]');
+    const conc = sel.value === 'Resolvido' || sel.value === 'Descartado';
+    caixa.querySelector('[data-resposta-caixa]').classList.toggle('oculto', !conc);
+    caixa.querySelector('[data-resposta-rotulo]').textContent = rotuloResposta(sel.value);
+    caixa.querySelector('[data-resposta]').placeholder = sel.value === 'Descartado' ? 'Explique por que não vai ser feito' : 'Ex.: Arrumado na versão nova!';
+  });
   $('melh-corpo').addEventListener('click', async (e) => {
     const f = e.target.closest('[data-mf]');
     if (f) { MF = f.dataset.mf; RENDER.melh(); return; }
@@ -1397,7 +1464,27 @@ const VERSAO_ADMIN = '2';
     if (!caixa) return;
     const m = (D.melhorias || []).find(x => x.id === caixa.dataset.melh);
     if (!m) return;
+    const img = e.target.closest('[data-fotos] img');
+    if (img) { abrirVisor(img.src); return; }
     const c = e.target.closest('[data-carregar]');
+    if (c && c.dataset.carregar === 'imagens') {
+      // v3: a imagem da tela e as fotos (tiradas ou da galeria)
+      c.disabled = true;
+      const quais = (m.imagemId ? [['imagem', 'a tela']] : []).concat(Array.from({ length: Number(m.fotos) || 0 }, (_, k) => ['foto' + (k + 1), 'foto ' + (k + 1)]));
+      const grade = caixa.querySelector('[data-fotos]');
+      grade.classList.remove('oculto');
+      grade.innerHTML = quais.map(([q, r]) => `<div data-q="${q}"><span class="carr">…</span><small>${r}</small></div>`).join('');
+      for (const [q] of quais) {
+        try {
+          const src = await baixarArquivo(null, { id: m.id, qual: q });
+          const el = grade.querySelector(`[data-q="${q}"]`);
+          if (el) el.insertAdjacentHTML('afterbegin', `<img src="${src}" alt="imagem do pedido">`);
+        } catch (err) { if (!(err instanceof ErroSessao)) aviso('Erro: ' + erroMsg(err), 5000); }
+        const el = grade.querySelector(`[data-q="${q}"] .carr`); if (el) el.remove();
+      }
+      c.remove();
+      return;
+    }
     if (c) {
       const qual = c.dataset.carregar;
       c.disabled = true;
@@ -1424,8 +1511,15 @@ const VERSAO_ADMIN = '2';
     }
     const s = e.target.closest('[data-salvar-melh]');
     if (s) {
+      const sit = caixa.querySelector('[data-situacao]').value;
+      const resposta = caixa.querySelector('[data-resposta]').value.trim();
+      if (sit === 'Descartado' && !resposta) {
+        aviso('Escreva o motivo: quem pediu vai ver no app.', 4000);
+        caixa.querySelector('[data-resposta]').focus();
+        return;
+      }
       s.disabled = true;
-      const ok = await tentar(chamar('admSalvarMelhoria', m.id, { situacao: caixa.querySelector('[data-situacao]').value, anotacao: caixa.querySelector('[data-anotacao]').value }), 'Pedido salvo.');
+      const ok = await tentar(chamar('admSalvarMelhoria', m.id, { situacao: sit, anotacao: caixa.querySelector('[data-anotacao]').value, resposta }), 'Pedido salvo.');
       s.disabled = false;
       if (ok) await carregar();
     }
@@ -1588,7 +1682,133 @@ const VERSAO_ADMIN = '2';
     const so = /Windows/.test(ua) ? 'Windows' : /Mac OS X/.test(ua) ? 'Mac' : /Linux/.test(ua) ? 'Linux' : 'computador';
     return `Computador ${so} · ${nav}`;
   }
+  // ------------------------------------------------------------------
+  //  v3: digital (biometria do celular) para abrir o app
+  //  No celular com a digital ligada, toda vez que o app abre (não quando volta do fundo) pede a digital;
+  //  "Entrar com a senha" sempre vale. No computador (ou sem a digital), pede a senha toda vez que abre.
+  //  A digital fica só neste aparelho (WebAuthn: o Android confere o dedo; a senha nunca é guardada).
+  // ------------------------------------------------------------------
+  const Digital = {
+    disponivelCache: null,
+    celular() { return /Android|iPhone|iPad/i.test(navigator.userAgent || '') || !!(navigator.userAgentData && navigator.userAgentData.mobile); },
+    ligada() { try { return !!localStorage.getItem('adm_digital'); } catch (e) { return false; } },
+    desligar() { guardar('adm_digital', null); },
+    async disponivel() {
+      try {
+        const ok = !!(window.PublicKeyCredential && PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable &&
+          await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable());
+        this.disponivelCache = ok;
+        return ok;
+      } catch (e) { this.disponivelCache = false; return false; }
+    },
+    aleatorio(n) { const b = new Uint8Array(n); crypto.getRandomValues(b); return b; },
+    paraTexto(buf) { return btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); },
+    deTexto(t) {
+      const b = atob(String(t).replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((String(t).length + 3) % 4));
+      return Uint8Array.from(b, (c) => c.charCodeAt(0));
+    },
+    /** Cadastra a digital neste celular. Devolve true se deu certo. */
+    async cadastrar() {
+      if (!(await this.disponivel())) { aviso('Este celular não tem a digital (ou ela não está cadastrada nas configurações do Android).', 5000); return false; }
+      try {
+        const cred = await navigator.credentials.create({ publicKey: {
+          challenge: this.aleatorio(32),
+          rp: { name: 'Controle de Gastos - Administrador' },
+          user: { id: this.aleatorio(16), name: 'administrador', displayName: 'Administrador' },
+          pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
+          authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required', residentKey: 'discouraged' },
+          timeout: 60000, attestation: 'none'
+        } });
+        if (!cred) return false;
+        guardar('adm_digital', this.paraTexto(cred.rawId));
+        guardar('adm_digital_perguntado', '1');
+        return true;
+      } catch (e) {
+        if (e && e.name !== 'NotAllowedError' && e.name !== 'AbortError') aviso('Não foi possível usar a digital: ' + erroMsg(e), 5000);
+        return false;
+      }
+    },
+    /** Pede a digital. Devolve true se a pessoa confirmou. */
+    async conferir() {
+      const id = (() => { try { return localStorage.getItem('adm_digital'); } catch (e) { return ''; } })();
+      if (!id) return false;
+      try {
+        const r = await navigator.credentials.get({ publicKey: {
+          challenge: this.aleatorio(32), timeout: 60000, userVerification: 'required',
+          allowCredentials: [{ type: 'public-key', id: this.deTexto(id), transports: ['internal'] }]
+        } });
+        return !!r;
+      } catch (e) {
+        return false;
+      }
+    }
+  };
+  let PORTAO = false;   // true: o aparelho já está conectado; falta só a digital ou a senha para abrir
+  let DIGITAL_FALHOU = false;
+  function liberarApp() {
+    PORTAO = false;
+    history.replaceState({ tela: 'inicio', d: 0 }, '');
+    mostrar('inicio');
+    carregar();
+  }
+  function modoEntrar(digital) {
+    $('ent-digital').classList.toggle('oculto', !digital);
+    $('ent-com-senha').classList.toggle('oculto', !!digital);
+  }
+  /** Abrindo o app com o aparelho já conectado. */
+  async function mostrarPortao() {
+    PORTAO = true;
+    D = null;
+    profundidade = 0;
+    history.replaceState({ tela: 'entrar', d: 0 }, '');
+    mostrar('entrar');
+    $('entrar-versao').textContent = 'v' + VERSAO_ADMIN;
+    $('ent-erro').textContent = '';
+    $('ent-senha').value = '';
+    $('ent-texto').textContent = 'Por segurança, digite a senha do painel para abrir.';
+    $('ent-rodape').classList.add('oculto');
+    const comDigital = Digital.celular() && Digital.ligada() && (await Digital.disponivel());
+    modoEntrar(comDigital);
+    if (comDigital) setTimeout(entrarComDigital, 350);
+  }
+  async function entrarComDigital() {
+    if (!PORTAO) return;
+    $('ent-digital-msg').textContent = 'Confirme com a sua digital…';
+    if (await Digital.conferir()) { liberarApp(); return; }
+    DIGITAL_FALHOU = true;
+    $('ent-digital-msg').textContent = 'A digital não deu certo.';
+    $('ent-digital-ok').textContent = '👆 Tentar de novo';
+  }
+  /** Depois de entrar com a senha num celular: oferece a digital (uma vez; ou de novo, se ela deixou de funcionar). */
+  async function oferecerDigital() {
+    if (!Digital.celular() || !(await Digital.disponivel())) return;
+    const falhou = DIGITAL_FALHOU && Digital.ligada();
+    DIGITAL_FALHOU = false;
+    let perguntado = false;
+    try { perguntado = !!localStorage.getItem('adm_digital_perguntado'); } catch (e) { perguntado = true; }
+    if (!falhou && (Digital.ligada() || perguntado)) return;
+    guardar('adm_digital_perguntado', '1');
+    const titulo = falhou ? '👆 A digital não funcionou' : '👆 Usar a digital para entrar?';
+    const texto = falhou
+      ? 'Se você trocou de celular ou mudou as digitais cadastradas, cadastre de novo. Ou continue só com a senha.'
+      : 'Nas próximas vezes que abrir o app neste celular, é só encostar o dedo. Se a digital não der certo, a senha continua valendo.';
+    const sim = await new Promise((ok) => {
+      const j = abrirJanela(`<h3>${titulo}</h3><p>${texto}</p>` + (falhou ? '' : '<p class="dica-txt">Prefere só a senha? Toque em <b>Agora não</b>. Dá para ligar depois em <b>Mais</b>.</p>') +
+        `<div class="botoes-j"><button class="botao" data-nao type="button">${falhou ? 'Só a senha' : 'Agora não'}</button>` +
+        `<button class="botao primario" data-sim type="button">${falhou ? 'Cadastrar de novo' : 'Usar a digital'}</button></div>`, { aoFechar: () => ok(false), fecharFora: false });
+      j.classList.add('janela-digital');
+      j.querySelector('[data-nao]').onclick = () => { janelaAberta.aoFechar = null; fecharJanela(); ok(false); };
+      j.querySelector('[data-sim]').onclick = () => { janelaAberta.aoFechar = null; fecharJanela(); ok(true); };
+    });
+    if (falhou && !sim) { Digital.desligar(); return; }
+    if (sim && await Digital.cadastrar()) aviso('Pronto! Nas próximas vezes, é só a digital.', 3500);
+  }
+  $('ent-dedo').onclick = () => entrarComDigital();
+  $('ent-digital-ok').onclick = () => entrarComDigital();
+  $('ent-usar-senha').onclick = () => { modoEntrar(false); setTimeout(() => $('ent-senha').focus(), 50); };
+
   function mostrarEntrar(msg = '') {
+    PORTAO = false;
     D = null;
     SESSOES = null;
     fecharJanela(true);
@@ -1599,6 +1819,9 @@ const VERSAO_ADMIN = '2';
     $('ent-erro').textContent = msg;
     $('ent-senha').value = '';
     $('entrar-versao').textContent = 'v' + VERSAO_ADMIN;
+    $('ent-texto').textContent = 'Área só do organizador. Entre com a senha do painel.';
+    $('ent-rodape').classList.remove('oculto');
+    modoEntrar(false);
     if (!urlServidor()) $('ent-erro').textContent = 'O app não encontrou o endereço do servidor (arquivo config.js).';
   }
   function sairLocal(msg) {
@@ -1614,13 +1837,27 @@ const VERSAO_ADMIN = '2';
     b.disabled = true;
     b.textContent = 'Entrando…';
     try {
+      if (PORTAO && TOKEN) {
+        // o aparelho já está conectado: só confere a senha (sem criar outra conexão)
+        let conferido = true;
+        try {
+          await api('conferirSenha', { senha });
+        } catch (e) {
+          if (e instanceof ErroSessao) return; // a conexão caiu: a tela de entrar normal já apareceu
+          if (e.codigo !== 'acao_desconhecida') throw e;
+          conferido = false; // servidor antigo (sem conferirSenha): entra do jeito de sempre
+        }
+        if (conferido) { liberarApp(); oferecerDigital(); return; }
+      }
       const r = await api('entrar', { senha, aparelho: descricaoAparelho() });
       TOKEN = r.token;
       guardar('adm_token', TOKEN);
-      INFO = { urlPlanilha: r.urlPlanilha, urlPasta: r.urlPasta, versaoServidor: r.versaoServidor };
+      INFO = { urlPlanilha: r.urlPlanilha, urlPasta: r.urlPasta, versaoServidor: r.versaoServidor, dataServidor: r.dataServidor || '' };
       guardar('adm_info', JSON.stringify(INFO));
+      PORTAO = false;
       history.replaceState({ tela: 'inicio', d: 0 }, '');
       mostrar('inicio');
+      oferecerDigital();
       await carregar();
     } catch (e) {
       $('ent-erro').textContent = erroMsg(e);
@@ -1690,6 +1927,7 @@ const VERSAO_ADMIN = '2';
     inicio: ['A1', 'Início'], lanc: ['A2', 'Lançamentos'], 'lanc-ver': ['A3', 'Lançamento'], 'lanc-editar': ['A4', 'Editar lançamento'],
     pessoas: ['A5', 'Pessoas'], pessoa: ['A6', 'Pessoa'], veiculos: ['A7', 'Veículos'], veiculo: ['A8', 'Veículo'],
     'veiculo-editar': ['A9', 'Editar veículo'], gasto: ['A10', 'Gasto do veículo'], 'gasto-editar': ['A11', 'Editar gasto do veículo'],
+    entrar: ['A19', 'Entrar'],
     mais: ['A12', 'Mais'], lixo: ['A13', 'Lixeira'], melh: ['A14', 'Melhorias'], ia: ['A15', 'IA (uso e chave)'], listas: ['A16', 'Listas'],
     convite: ['A17', 'Convite'], aparelhos: ['A18', 'Aparelhos conectados']
   };
@@ -1757,7 +1995,7 @@ const VERSAO_ADMIN = '2';
     if (PED) return;
     if (Gravador.gravando()) return;
     const pedido = { id: (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2)), tela: telaMelhoria(),
-      imagem: null, audio: null, duracao: 0, relogio: null, url: '', urlAudio: '' };
+      imagem: null, audio: null, duracao: 0, relogio: null, url: '', urlAudio: '', fotos: [] };
     PED = pedido;
     aviso('Preparando…', 1500);
     pedido.imagem = await imagemDaTela();
@@ -1766,7 +2004,11 @@ const VERSAO_ADMIN = '2';
     pedido.url = pedido.imagem ? URL.createObjectURL(pedido.imagem) : '';
     const j = abrirJanela('<div class="pedido-melhoria"><h3>🐞 Problema ou ideia</h3>' +
       '<p class="dica-txt">Conte o que está errado nesta tela ou o que pode melhorar. O pedido aparece em <b>Melhorias</b>, junto com uma imagem desta tela.</p>' +
-      (pedido.url ? `<img class="pedido-tela" src="${pedido.url}" alt="Imagem desta tela">` : '') +
+      // v3: a imagem da tela (com × para tirar) e fotos (tirar foto ou da galeria), até 5 no total
+      '<div class="pm-fotos" data-pm-fotos></div>' +
+      '<div class="pm-botoes"><label class="botao arquivo" data-pm-camera-b>📷 Tirar foto<input type="file" accept="image/*" capture="environment" data-pm-camera></label>' +
+      '<label class="botao arquivo" data-pm-galeria-b>🖼️ Galeria<input type="file" accept="image/*" multiple data-pm-galeria></label></div>' +
+      '<div class="pm-conta" data-pm-conta></div>' +
       '<button class="botao largo" type="button" data-pm-gravar>🎤 Gravar áudio</button><div data-pm-audio></div>' +
       '<label for="pm-texto">Ou escreva (opcional)</label>' +
       '<textarea id="pm-texto" rows="3" maxlength="3000" autocapitalize="sentences" placeholder="Ex.: o botão Salvar está cobrindo o campo do valor"></textarea>' +
@@ -1775,6 +2017,40 @@ const VERSAO_ADMIN = '2';
     { aoFechar: () => descartarPedido(), fecharFora: false });
     const q = (sel) => j.querySelector(sel);
     const erro = (m) => { const e = q('[data-pm-erro]'); if (e) e.textContent = m; };
+    const cabem = () => MAX_IMAGENS_PEDIDO - (pedido.imagem ? 1 : 0) - pedido.fotos.length;
+    const desenharFotos = () => {
+      const itens = [];
+      if (pedido.imagem && pedido.url) itens.push(`<div class="pm-foto"><img src="${pedido.url}" alt="Imagem desta tela"><button class="x" type="button" data-tirar="tela" aria-label="Tirar a imagem da tela">×</button><small>esta tela</small></div>`);
+      pedido.fotos.forEach((f) => itens.push(`<div class="pm-foto"><img src="${f.url}" alt="foto"><button class="x" type="button" data-tirar="${f.id}" aria-label="Tirar esta foto">×</button><small>foto</small></div>`));
+      q('[data-pm-fotos]').innerHTML = itens.join('');
+      q('[data-pm-fotos]').classList.toggle('oculto', !itens.length);
+      q('[data-pm-conta]').textContent = itens.length ? `${itens.length} de ${MAX_IMAGENS_PEDIDO} fotos` : `Você pode juntar até ${MAX_IMAGENS_PEDIDO} fotos.`;
+      const cheio = cabem() <= 0;
+      ['[data-pm-camera]', '[data-pm-galeria]'].forEach((sel) => { q(sel).disabled = cheio; });
+      ['[data-pm-camera-b]', '[data-pm-galeria-b]'].forEach((sel) => q(sel).classList.toggle('desativado', cheio));
+    };
+    const juntar = async (input) => {
+      const arqs = Array.from(input.files || []).slice(0, Math.max(0, cabem()));
+      input.value = '';
+      for (const a of arqs) {
+        try {
+          const blob = await reduzirFoto(a);
+          if (PED !== pedido) return;
+          pedido.fotos.push({ id: 'f' + Math.random().toString(36).slice(2), blob, url: URL.createObjectURL(blob) });
+        } catch (e) { erro('Não foi possível usar uma das fotos.'); }
+      }
+      desenharFotos();
+    };
+    q('[data-pm-camera]').onchange = (e) => juntar(e.target);
+    q('[data-pm-galeria]').onchange = (e) => juntar(e.target);
+    q('[data-pm-fotos]').addEventListener('click', (e) => {
+      const x = e.target.closest('[data-tirar]');
+      if (!x) return;
+      if (x.dataset.tirar === 'tela') { if (pedido.url) URL.revokeObjectURL(pedido.url); pedido.imagem = null; pedido.url = ''; }
+      else pedido.fotos = pedido.fotos.filter((f) => { if (f.id === x.dataset.tirar) URL.revokeObjectURL(f.url); return f.id !== x.dataset.tirar; });
+      desenharFotos();
+    });
+    desenharFotos();
     const parar = async () => {
       clearInterval(pedido.relogio);
       const res = await Gravador.parar();
@@ -1816,6 +2092,10 @@ const VERSAO_ADMIN = '2';
           versaoApp: 'admin ' + VERSAO_ADMIN, aparelho: descricaoAparelho() };
         if (pedido.audio) melhoria.audio = { mime: pedido.audio.type || 'audio/webm', base64: await blobParaBase64(pedido.audio) };
         if (pedido.imagem) melhoria.imagem = { mime: 'image/jpeg', base64: await blobParaBase64(pedido.imagem) };
+        if (pedido.fotos.length) {
+          melhoria.fotos = [];
+          for (const f of pedido.fotos) melhoria.fotos.push({ mime: f.blob.type || 'image/jpeg', base64: await blobParaBase64(f.blob) });
+        }
         const r = await api('melhoria', { melhoria });
         if (PED !== pedido) return;
         janelaAberta.aoFechar = null;
@@ -1838,7 +2118,24 @@ const VERSAO_ADMIN = '2';
     if (Gravador.gravando()) Gravador.cancelar();
     if (pedido.url) URL.revokeObjectURL(pedido.url);
     if (pedido.urlAudio) URL.revokeObjectURL(pedido.urlAudio);
+    (pedido.fotos || []).forEach((f) => URL.revokeObjectURL(f.url));
     PED = null;
+  }
+  const MAX_IMAGENS_PEDIDO = 5;
+  /** Foto do celular ou da galeria, reduzida (lado maior até 1600 px, JPEG) para o pedido não ficar pesado. */
+  async function reduzirFoto(arquivo) {
+    const url = URL.createObjectURL(arquivo);
+    try {
+      const img = await new Promise((ok, falhou) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => falhou(new Error('imagem inválida')); i.src = url; });
+      const f = Math.min(1, 1600 / Math.max(img.naturalWidth, img.naturalHeight));
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.naturalWidth * f);
+      c.height = Math.round(img.naturalHeight * f);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      return await new Promise((ok) => c.toBlob((b) => ok(b || arquivo), 'image/jpeg', 0.8));
+    } finally {
+      URL.revokeObjectURL(url);
+    }
   }
   colocarBugs();
   // com uma janela ou a foto aberta, a tela de trás não rola (v2)
@@ -1849,12 +2146,11 @@ const VERSAO_ADMIN = '2';
   // ------------------------------------------------------------------
   $('nav-versao').textContent = 'v' + VERSAO_ADMIN;
   if (TOKEN && urlServidor()) {
-    history.replaceState({ tela: 'inicio', d: 0 }, '');
-    mostrar('inicio');
-    carregar();
+    mostrarPortao(); // v3: digital (celular) ou a senha, toda vez que o app abre
+    Digital.disponivel();
   } else {
     mostrarEntrar();
   }
   // para os testes
-  window.Admin = { tela: () => TELA, dados: () => D, carregar, ir, irAba };
+  window.Admin = { tela: () => TELA, dados: () => D, carregar, ir, irAba, Digital };
 })();
