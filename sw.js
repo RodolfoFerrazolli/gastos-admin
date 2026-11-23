@@ -4,7 +4,7 @@
 //  Ao publicar uma versão nova, aumente o número abaixo.
 //  Só mexe nos caches que começam com "admin-" (os do app das pessoas ficam).
 // =====================================================================
-const VERSAO = 'admin-v3';
+const VERSAO = 'admin-v4';
 const ARQUIVOS = [
   './',
   './index.html',

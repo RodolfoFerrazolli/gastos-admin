@@ -8,7 +8,7 @@
 //  o 🐞 de pedido de correção ou melhoria; a bolinha branca em cima de
 //  "Filtros" saiu; com uma janela aberta, a tela de trás não rola.
 // =====================================================================
-const VERSAO_ADMIN = '3';
+const VERSAO_ADMIN = '4';
 
 (() => {
   'use strict';
@@ -112,13 +112,13 @@ const VERSAO_ADMIN = '3';
   }
   class ErroSessao extends Error {}
 
-  async function api(acao, dados = {}, { tempoMs = 120000 } = {}) {
+  async function api(acao, dados = {}, { tempoMs = 120000, fundo = false } = {}) { // v4: fundo = sem a tela de "carregando"
     const url = urlServidor();
     if (!url) throw new Error('O app não encontrou o endereço do servidor (arquivo config.js).');
     const corpo = Object.assign({ admin: true, acao, token: TOKEN || undefined }, dados);
     const ctl = new AbortController();
     const relogio = setTimeout(() => ctl.abort(), tempoMs);
-    carregando(true);
+    if (!fundo) carregando(true);
     let r;
     try {
       const resp = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(corpo), signal: ctl.signal, redirect: 'follow' });
@@ -127,7 +127,7 @@ const VERSAO_ADMIN = '3';
       throw new Error(navigator.onLine === false ? 'Sem internet no momento.' : 'Sem conexão com o servidor. Confira a internet e tente de novo.');
     } finally {
       clearTimeout(relogio);
-      carregando(false);
+      if (!fundo) carregando(false);
     }
     if (r && r.erro) {
       if (r.erro === 'sessao_invalida' && acao !== 'entrar') {
@@ -146,6 +146,11 @@ const VERSAO_ADMIN = '3';
   }
   async function chamar(fn, ...args) {
     const r = await api('chamar', { fn, args });
+    return r.resultado;
+  }
+  /** v4: chamada em segundo plano (a tela continua livre). */
+  async function chamarFundo(fn, ...args) {
+    const r = await api('chamar', { fn, args }, { fundo: true });
     return r.resultado;
   }
   function erroMsg(e) { return (e && e.message) || String(e); }
@@ -170,7 +175,9 @@ const VERSAO_ADMIN = '3';
     try {
       const dados = await chamar('admCarregar');
       D = dados;
+      aplicarFilaMelh(); // v4: pedidos salvos que ainda estão indo para o servidor
       D.carregadoEm = Date.now();
+      if (FILA_MELH.length) rodarFilaMelh(); // (se a sessão tinha caído, retoma)
       carregadoEm = Date.now();
       D.lancamentos.sort((a, b) => (b.dataHora || 0) - (a.dataHora || 0));
       atualizarContadores();
@@ -1131,13 +1138,35 @@ const VERSAO_ADMIN = '3';
   });
 
   // ---------------- Veículo ----------------
+  // v4: manutenção com itens (qtd × valor de cada) e o desconto do abastecimento
+  function nomeManutencao(r) {
+    const nome = String(r.descricao || '').split('\n')[0].trim();
+    if (nome) return nome;
+    const it = (r.itens || []).filter(i => i.nome);
+    if (!it.length) return 'Manutenção';
+    return it[0].nome + (it.length > 1 ? ` e mais ${it.length - 1} ${it.length === 2 ? 'item' : 'itens'}` : '');
+  }
+  function itensManHtml(r) {
+    const it = r.itens || [];
+    if (!it.length) return '';
+    const qtd = (q) => String(Math.round((Number(q) || 1) * 1000) / 1000).replace('.', ',');
+    const soma = it.reduce((t, i) => t + (Number(i.valor) || 0), 0);
+    const dif = Math.round((soma - (Number(r.valor) || 0)) * 100) / 100;
+    return `<div class="secao">Serviços e peças (${it.length})</div><div class="det">` +
+      it.map(i => `<div class="lin"><span>${esc(i.nome || '(sem nome)')}${Number(i.qtd) !== 1 && i.qtd != null ? `<br><small class="dica-txt">${qtd(i.qtd)} × ${brlUnit(i.unitario != null ? i.unitario : (Number(i.valor) || 0) / (Number(i.qtd) || 1))}</small>` : ''}</span>` +
+        `<span>${i.valor != null ? brl(i.valor) : '—'}</span></div>`).join('') +
+      (Math.abs(dif) >= 0.01 ? `<div class="lin"><span>Soma dos itens</span><span>${brl(soma)}</span></div><div class="lin"><span>${dif > 0 ? 'Desconto' : 'Diferença'}</span><span>${dif > 0 ? '− ' + brl(dif) : brl(-dif)}</span></div>` : '') +
+      `<div class="lin"><span><b>Total</b></span><span><b>${brl(r.valor)}</b></span></div></div>`;
+  }
   function cartaoGasto(r) {
     const t = TIPO_REG[r.tipo] || ['•', r.tipo];
     let titulo = t[1];
     if (r.tipo === 'abastecimento' && r.combustivel) titulo += ' · ' + r.combustivel;
-    if ((r.tipo === 'manutencao' || r.tipo === 'outros' || r.tipo === 'galeria') && r.descricao) titulo = String(r.descricao).split('\n')[0];
+    if ((r.tipo === 'outros' || r.tipo === 'galeria') && r.descricao) titulo = String(r.descricao).split('\n')[0];
+    if (r.tipo === 'manutencao') titulo = nomeManutencao(r);
     const meta = [dataDia(r.data).slice(0, 5), r.hodometro != null ? km(r.hodometro) : '', r.tipo === 'abastecimento' && r.litros ? String(r.litros).replace('.', ',') + ' L' : '',
-      r.tanqueCheio ? 'tanque cheio' : '', r.formaPagamento].filter(Boolean).join(' · ');
+      r.tanqueCheio ? 'tanque cheio' : '', Number(r.desconto) > 0 ? 'desconto ' + brl(r.desconto) : '',
+      r.tipo === 'manutencao' && (r.itens || []).length ? (r.itens.length === 1 ? '1 item' : r.itens.length + ' itens') : '', r.formaPagamento].filter(Boolean).join(' · ');
     const fotos = (D.arquivos[r.id] || []).filter(a => a.tipo === 'foto').length;
     return `<div class="cartao" data-gasto="${esc(r.id)}"><div class="corpo"><div class="desc">${t[0]} ${esc(titulo)}</div>` +
       `<div class="meta"><span class="quem">${esc(primeiroNome(String(r.participante || '').replace(/\s*\(conta excluída\)$/, '')))}${/\(conta excluída\)$/.test(r.participante || '') ? ' (excluída)' : ''}</span>${esc(meta)}${fotos ? ' · 📷' + (fotos > 1 ? fotos : '') : ''}</div></div>` +
@@ -1255,17 +1284,19 @@ const VERSAO_ADMIN = '3';
     $('gasto-titulo').textContent = t[1];
     $('gasto-sub').textContent = `${v.modelo || ''} · lançado por ${r.participante}`;
     const lin = (a, b) => b ? `<div class="lin"><span>${a}</span><span>${b}</span></div>` : '';
-    let html = `<div class="vtopo"><div class="linha1"><div class="n">${t[0]} ${esc(r.tipo === 'abastecimento' ? (r.combustivel || t[1]) : (String(r.descricao || '').split('\n')[0] || t[1]))}</div><b>${r.tipo === 'galeria' ? '' : brl(r.valor)}</b></div>` +
+    let html = `<div class="vtopo"><div class="linha1"><div class="n">${t[0]} ${esc(r.tipo === 'abastecimento' ? (r.combustivel || t[1]) : r.tipo === 'manutencao' ? nomeManutencao(r) : (String(r.descricao || '').split('\n')[0] || t[1]))}</div><b>${r.tipo === 'galeria' ? '' : brl(r.valor)}</b></div>` +
       `<div class="s">${dataDia(r.data)} · ${seloSit(r)}${r.fonte ? ' · lido por ' + esc(String(r.fonte).replace(/\+/g, ' + ').replace('sefaz', 'QR Code').replace('ia', 'IA')) : ''}</div>` +
       (r.excluido ? `<div style="margin-top:6px">${prazoHtml(r.excluidoEm)}</div>` : '') + '</div>';
     html += '<div class="det">' + lin('Veículo', esc(nomeVeic(v)) + (v.participante ? ` <small>(${esc(v.participante)})</small>` : '')) +
       (r.tipo === 'abastecimento' ? lin('Valor do litro', r.precoLitro != null ? brlUnit(r.precoLitro) : '—') + lin('Litros', r.litros != null ? String(r.litros).replace('.', ',') + (r.combustivel === 'GNV' ? ' m³' : ' L') : '—') +
-        lin('Tanque cheio', r.tanqueCheio ? 'Sim' : 'Não') : '') +
+        lin('Tanque cheio', r.tanqueCheio ? 'Sim' : 'Não') +
+        (Number(r.desconto) > 0 ? lin('Total da bomba', brl((Number(r.valor) || 0) + Number(r.desconto))) + lin('Desconto', '− ' + brl(r.desconto)) + lin('Valor pago', '<b>' + brl(r.valor) + '</b>') : '') : '') +
       (r.tipo === 'abastecimento' || r.tipo === 'manutencao' ? lin('Hodômetro', km(r.hodometro) || '—') : '') +
       (r.tipo === 'seguro' ? lin('Seguradora', esc(r.seguradora)) + lin('Apólice', esc(r.apolice)) + lin('Validade', r.validade ? dataDia(r.validade) : '') : '') +
       lin('Descrição', r.tipo !== 'abastecimento' ? esc(r.descricao) : esc(r.descricao)) +
       lin('Pagamento', esc(r.formaPagamento)) + lin('Local', esc(r.local) + (r.lat != null ? ` · <a target="_blank" rel="noopener" href="${mapa(r.lat, r.lng)}">🗺️ mapa</a>` : '')) +
       lin('Observação', esc(r.observacao)) + lin('Alterado em', dataHora(r.alteradoEm) + (r.alteradoPor ? ' por ' + esc(r.alteradoPor) : '')) + '</div>';
+    if (r.tipo === 'manutencao') html += itensManHtml(r); // v4
     html += '<div class="secao">Fotos e áudios</div>' + anexosHtml(D.arquivos[r.id] || []);
     html += r.excluido ? (r.excluidoCom ? '<p class="dica-txt" style="margin:14px">Este gasto foi excluído junto com o veículo ou a conta: ele volta ao restaurar.</p>'
       : '<div class="acoes um"><button class="botao primario" type="button" data-restaurar-gasto>Restaurar</button></div>')
@@ -1318,7 +1349,9 @@ const VERSAO_ADMIN = '3';
     }
     html += `<label for="ge-local">Local</label><input id="ge-local" value="${esc(r.local || '')}">` +
       `<label for="ge-sit">Situação</label><select id="ge-sit">${['confirmado', 'revisar', 'aguardando_ia'].map(s => `<option value="${s}"${s === (r.status || 'confirmado') ? ' selected' : ''}>${ROTULO[s]}</option>`).join('')}</select>` +
-      `<label for="ge-desc">Descrição</label><textarea id="ge-desc" rows="3">${esc(r.descricao || '')}</textarea>` +
+      `<label for="ge-desc">${r.tipo === 'manutencao' ? 'Nome da manutenção / descrição' : 'Descrição'}</label><textarea id="ge-desc" rows="3">${esc(r.descricao || '')}</textarea>` +
+      (r.tipo === 'manutencao' && (r.itens || []).length ? `<p class="dica-txt">Os ${r.itens.length === 1 ? '1 item' : r.itens.length + ' itens'} (serviços e peças) não mudam aqui: quem lançou muda no app.</p>` : '') +
+      (ab && Number(r.desconto) > 0 ? `<p class="dica-txt">O valor é o valor pago (já com o desconto de ${brl(r.desconto)}).</p>` : '') +
       '<div class="acoes" style="margin:18px 0"><button class="botao" type="button" data-voltar-form>Cancelar</button><button class="botao primario" type="button" id="ge-salvar">Salvar</button></div></div>';
     $('gasto-editar-corpo').innerHTML = html;
     return true;
@@ -1425,8 +1458,12 @@ const VERSAO_ADMIN = '3';
       .map(([k, r]) => `<button type="button" class="chip${MF === k ? ' on' : ''}" data-mf="${k}">${r}</button>`).join('') + '</div>';
     const lista = MF === 'pendentes' ? pend : MF === 'concluidos' ? conc : todos;
     const cls = { Novo: 'aguardando', 'Em andamento': 'revisar', Resolvido: 'ok', Descartado: 'exc' };
-    html += lista.length ? lista.map(m => `<div class="melh${melhoriaConcluida(m) ? ' concluida' : ''}" data-melh="${esc(m.id)}">` +
-      `<div class="cab">Pedido nº ${m.numero} <span class="selo ${cls[m.situacao] || ''}">${esc(m.situacao)}</span></div>` +
+    html += lista.length ? lista.map(m0 => {
+      // v4: o que foi escrito e ainda não foi salvo não se perde quando a lista é desenhada de novo
+      const ras = RASCUNHO_MELH[m0.id];
+      const m = ras ? Object.assign({}, m0, ras) : m0;
+      return `<div class="melh${melhoriaConcluida(m0) ? ' concluida' : ''}" data-melh="${esc(m.id)}">` +
+      `<div class="cab">Pedido nº ${m.numero} <span class="selo ${cls[m0.situacao] || ''}">${esc(m0.situacao)}</span>${ras ? '<span class="rascunho">não salvo</span>' : ''}</div>` +
       `<div class="m-tela">${m.tela ? 'Tela #' + esc(m.tela) + ' ' : ''}${esc(m.nomeTela || 'tela não identificada')} · ${esc(m.participante)} · ${quandoCurto(m.criadoEm)}` +
       `${m.versaoApp ? ' · app v' + esc(m.versaoApp) : ''}${m.aparelho ? ' · ' + celularHtml(m.aparelhoNome, m.aparelho) : ''}${m.janela ? ' · janela: “' + esc(m.janela) + '”' : ''}</div>` +
       (m.texto ? `<div class="m-txt">✍️ ${esc(m.texto)}</div>` : '') +
@@ -1442,14 +1479,74 @@ const VERSAO_ADMIN = '3';
       `<div class="m-resposta${melhoriaConcluida(m) ? '' : ' oculto'}" data-resposta-caixa><label data-resposta-rotulo>${rotuloResposta(m.situacao)}</label>` +
       `<textarea data-resposta rows="2" maxlength="1000" placeholder="${m.situacao === 'Descartado' ? 'Explique por que não vai ser feito' : 'Ex.: Arrumado na versão nova!'}">${esc(m.resposta || '')}</textarea>` +
       '<p class="dica-txt">Quem pediu vê esta mensagem no app, junto com o aviso.</p></div>' +
-      '<div class="acoes" style="margin:12px 0 0"><button class="botao pequeno perigo" type="button" data-excluir-melh>Excluir</button><button class="botao pequeno primario" type="button" data-salvar-melh>Salvar</button></div></div>').join('')
+      '<div class="acoes" style="margin:12px 0 0"><button class="botao pequeno perigo" type="button" data-excluir-melh>Excluir</button><button class="botao pequeno primario" type="button" data-salvar-melh>Salvar</button></div></div>';
+    }).join('')
       : `<div class="vazio-adm">${MF === 'pendentes' ? 'Nenhum pedido pendente.' : 'Nenhum pedido aqui.'}</div>`;
     $('melh-corpo').innerHTML = html;
   };
   function nImagens(m) { return (m.imagemId ? 1 : 0) + (Number(m.fotos) || 0); }
   function rotuloResposta(sit) { return sit === 'Descartado' ? 'Motivo (obrigatório)' : 'Mensagem para quem pediu (opcional)'; }
+  // ---- v4: rascunhos e fila de envio dos pedidos ----
+  const RASCUNHO_MELH = {};
+  const FILA_MELH = []; // { id, numero, dados, tentativas }
+  let filaRodando = false;
+  function guardarRascunho(caixa) {
+    const id = caixa.dataset.melh;
+    const m = (D.melhorias || []).find(x => x.id === id);
+    if (!m) return;
+    const r = { situacao: caixa.querySelector('[data-situacao]').value, anotacao: caixa.querySelector('[data-anotacao]').value, resposta: caixa.querySelector('[data-resposta]').value };
+    const igual = r.situacao === m.situacao && r.anotacao === (m.anotacao || '') && r.resposta === (m.resposta || '');
+    if (igual) delete RASCUNHO_MELH[id]; else RASCUNHO_MELH[id] = r;
+    const cab = caixa.querySelector('.cab');
+    const marca = cab.querySelector('.rascunho');
+    if (!igual && !marca) cab.insertAdjacentHTML('beforeend', '<span class="rascunho">não salvo</span>');
+    if (igual && marca) marca.remove();
+  }
+  function aplicarFilaMelh() {
+    FILA_MELH.forEach((f) => { const m = (D.melhorias || []).find(x => x.id === f.id); if (m) Object.assign(m, f.dados); });
+  }
+  function barraFila(texto, ok) {
+    let b = $('fila-envio');
+    if (!texto) { if (b) b.remove(); return; }
+    if (!b) { document.body.insertAdjacentHTML('beforeend', '<div id="fila-envio" class="fila-envio"></div>'); b = $('fila-envio'); }
+    b.classList.toggle('ok', !!ok);
+    b.classList.toggle('erro', ok === false);
+    b.innerHTML = (ok ? '' : '<span class="gira"></span>') + esc(texto);
+  }
+  let barraRelogio = null;
+  async function rodarFilaMelh() {
+    if (filaRodando) return;
+    filaRodando = true;
+    clearTimeout(barraRelogio);
+    while (FILA_MELH.length) {
+      const f = FILA_MELH[0];
+      const nums = FILA_MELH.map(x => 'nº ' + x.numero).join(', ');
+      barraFila(FILA_MELH.length > 1 ? `Salvando os pedidos ${nums} no servidor… pode continuar.` : `Salvando o pedido nº ${f.numero} no servidor… pode continuar.`);
+      try {
+        await chamarFundo('admSalvarMelhoria', f.id, f.dados);
+        FILA_MELH.shift();
+        if (!FILA_MELH.length) {
+          barraFila(`✓ Pedido nº ${f.numero} salvo.`, true);
+          barraRelogio = setTimeout(() => barraFila(''), 3000);
+        }
+      } catch (e) {
+        if (e instanceof ErroSessao) { barraFila(''); filaRodando = false; return; } // volta depois de entrar de novo
+        f.tentativas = (f.tentativas || 0) + 1;
+        const espera = Math.min(60, 5 * f.tentativas);
+        barraFila(`Não deu para salvar o pedido nº ${f.numero} (${erroMsg(e)}). Tentando de novo em ${espera} s… nada foi perdido.`, false);
+        await new Promise(ok => setTimeout(ok, espera * 1000));
+      }
+    }
+    filaRodando = false;
+  }
+  window.addEventListener('online', () => { if (FILA_MELH.length) rodarFilaMelh(); });
+  $('melh-corpo').addEventListener('input', (e) => {
+    const caixa = e.target.closest('[data-melh]');
+    if (caixa && e.target.closest('[data-anotacao], [data-resposta]')) guardarRascunho(caixa);
+  });
   $('melh-corpo').addEventListener('change', (e) => {
     const sel = e.target.closest('[data-situacao]');
+    if (sel) guardarRascunho(sel.closest('[data-melh]'));
     if (!sel) return;
     const caixa = sel.closest('[data-melh]');
     const conc = sel.value === 'Resolvido' || sel.value === 'Descartado';
@@ -1518,10 +1615,15 @@ const VERSAO_ADMIN = '3';
         caixa.querySelector('[data-resposta]').focus();
         return;
       }
-      s.disabled = true;
-      const ok = await tentar(chamar('admSalvarMelhoria', m.id, { situacao: sit, anotacao: caixa.querySelector('[data-anotacao]').value, resposta }), 'Pedido salvo.');
-      s.disabled = false;
-      if (ok) await carregar();
+      // v4: o pedido muda na hora (sai dos Pendentes se foi concluído) e o envio continua sozinho
+      const dados = { situacao: sit, anotacao: caixa.querySelector('[data-anotacao]').value, resposta };
+      const ja = FILA_MELH.find(x => x.id === m.id);
+      if (ja) ja.dados = dados; else FILA_MELH.push({ id: m.id, numero: m.numero, dados });
+      Object.assign(m, dados);
+      delete RASCUNHO_MELH[m.id];
+      atualizarContadores();
+      redesenhar();
+      rodarFilaMelh();
     }
   });
 

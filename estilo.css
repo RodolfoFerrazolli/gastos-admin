@@ -813,3 +813,12 @@ html.fundo-travado, html.fundo-travado body { overflow: hidden; }
 .m-resposta textarea { width: 100%; }
 .m-fotos div { cursor: zoom-in; }
 .m-fotos .carr { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--cinza); font-size: 20px; }
+/* ===================== v4 ===================== */
+/* pedidos: o envio continua sozinho, lá embaixo */
+.fila-envio { position: fixed; left: 12px; right: 12px; bottom: 74px; z-index: 50; padding: 10px 12px; border-radius: 12px; font-size: 14px; font-weight: 600;
+  display: flex; align-items: center; gap: 8px; background: #e8f1fb; color: #1d3a5c; border: 1px solid #c9dcf0; box-shadow: 0 2px 8px rgba(20, 40, 60, .12); }
+.fila-envio .gira { flex: none; width: 14px; height: 14px; border-radius: 50%; border: 2px solid #9db9d8; border-top-color: #1d3a5c; animation: fila-gira .8s linear infinite; }
+@keyframes fila-gira { to { transform: rotate(360deg); } }
+.fila-envio.ok { background: #e7f6ee; color: #1f6b43; border-color: #bfe3cf; }
+.fila-envio.erro { background: #fff4e0; color: #8a4a06; border-color: #f0d4a8; }
+.melh .rascunho { font-size: 12px; font-weight: 700; color: #b76e00; background: #fff4e0; border-radius: 8px; padding: 2px 8px; margin-left: 6px; }
