@@ -8,7 +8,7 @@
 //  o 🐞 de pedido de correção ou melhoria; a bolinha branca em cima de
 //  "Filtros" saiu; com uma janela aberta, a tela de trás não rola.
 // =====================================================================
-const VERSAO_ADMIN = '4';
+const VERSAO_ADMIN = '5';
 
 (() => {
   'use strict';
@@ -102,7 +102,12 @@ const VERSAO_ADMIN = '4';
   try { TOKEN = localStorage.getItem('adm_token') || ''; } catch (e) { TOKEN = ''; }
   let INFO = {};
   try { INFO = JSON.parse(localStorage.getItem('adm_info') || '{}') || {}; } catch (e) { INFO = {}; }
-  function guardar(chave, valor) { try { if (valor == null) localStorage.removeItem(chave); else localStorage.setItem(chave, valor); } catch (e) { /* sem armazenamento */ } }
+  function guardar(chave, valor) {
+    try { if (valor == null) localStorage.removeItem(chave); else localStorage.setItem(chave, valor); } catch (e) { /* sem armazenamento */ }
+    // v5: o service worker usa a chave do aparelho para mandar os pedidos do 🐞 com o app fechado
+    if (chave === 'adm_token' && typeof AdminFundo !== 'undefined') AdminFundo.gravarConfig('token', valor || null).catch(() => { /* opcional */ });
+  }
+  if (TOKEN && typeof AdminFundo !== 'undefined') AdminFundo.gravarConfig('token', TOKEN).catch(() => { /* opcional */ });
 
   let nCarregando = 0;
   function carregando(liga) {
@@ -1179,7 +1184,9 @@ const VERSAO_ADMIN = '4';
     const lin = (r, val) => `<div class="lin"><span>${r}</span><span>${val || '<span class="dica-txt">—</span>'}</span></div>`;
     const j = abrirJanela('<h3>ℹ️ Informações do veículo</h3><div class="det info-veic">' +
       lin('Montadora', esc(v.montadora)) + lin('Modelo', esc(v.modelo)) + lin('Ano', v.ano ? esc(String(v.ano)) : '') + lin('Placa', esc(v.placa)) +
-      lin('Cor', esc(v.cor)) + lin('Observação', v.observacao ? `<span class="info-obs">${esc(v.observacao)}</span>` : '') + lin('Dono', esc(v.participante)) +
+      lin('Cor', esc(v.cor)) + lin('Tanque', Number(v.tanque) > 0 ? String(v.tanque).replace('.', ',') + ' litros' : '') + // v5
+      lin('Pneus (troca antiga)', v.pneusInicio ? Object.keys(v.pneusInicio).map(k => `${NOMES_PNEU[k] || k}: ${v.pneusInicio[k].data ? v.pneusInicio[k].data.split('-').reverse().join('/') : ''}${v.pneusInicio[k].km != null ? ' · ' + km(v.pneusInicio[k].km) : ''}`).map(esc).join('<br>') : '') +
+      lin('Observação', v.observacao ? `<span class="info-obs">${esc(v.observacao)}</span>` : '') + lin('Dono', esc(v.participante)) +
       lin('Compartilhado com', comps.length ? comps.map(c => esc(c.nome) + (c.situacao === 'pendente' ? ' <small>(pendente)</small>' : '')).join(', ') : 'ninguém') +
       lin('Cadastrado em', v.criadoEm ? dataHora(v.criadoEm) : '') + '</div>' +
       `<div class="secao" style="margin:14px 0 6px">Fotos</div>` +
@@ -1276,6 +1283,15 @@ const VERSAO_ADMIN = '4';
   });
 
   // ---------------- Gasto do veículo (ver) ----------------
+  // v5: pneus trocados e o abastecimento que não cabe no tanque
+  const NOMES_PNEU = { de: 'Dianteiro esquerdo', dd: 'Dianteiro direito', te: 'Traseiro esquerdo', td: 'Traseiro direito', estepe: 'Estepe' };
+  function textoPneus(p) {
+    const pos = (p && p.pos) || [];
+    if (!pos.length) return '';
+    const extra = [p.marca, p.medida].filter(Boolean).join(' ');
+    return pos.map(x => NOMES_PNEU[x] || x).join(', ') + (extra ? ` (${extra})` : '');
+  }
+  function naoCabe(r, v) { return r.tipo === 'abastecimento' && r.combustivel !== 'GNV' && Number(v && v.tanque) > 0 && Number(r.litros) > Number(v.tanque) * 1.1; }
   RENDER.gasto = ({ id }) => {
     const r = registroPorId(id);
     if (!r) return false;
@@ -1295,6 +1311,9 @@ const VERSAO_ADMIN = '4';
       (r.tipo === 'seguro' ? lin('Seguradora', esc(r.seguradora)) + lin('Apólice', esc(r.apolice)) + lin('Validade', r.validade ? dataDia(r.validade) : '') : '') +
       lin('Descrição', r.tipo !== 'abastecimento' ? esc(r.descricao) : esc(r.descricao)) +
       lin('Pagamento', esc(r.formaPagamento)) + lin('Local', esc(r.local) + (r.lat != null ? ` · <a target="_blank" rel="noopener" href="${mapa(r.lat, r.lng)}">🗺️ mapa</a>` : '')) +
+      lin('Pneus trocados', r.tipo === 'manutencao' && r.pneus ? esc(textoPneus(r.pneus)) : '') + // v5
+      lin('Conferir', naoCabe(r, v) ? `🔍 ${String(r.litros).replace('.', ',')} L não cabem no tanque (${String(v.tanque).replace('.', ',')} L)` : '') +
+      lin('CNPJ da loja', r.cnpj ? esc(r.cnpj.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5')) : '') +
       lin('Observação', esc(r.observacao)) + lin('Alterado em', dataHora(r.alteradoEm) + (r.alteradoPor ? ' por ' + esc(r.alteradoPor) : '')) + '</div>';
     if (r.tipo === 'manutencao') html += itensManHtml(r); // v4
     html += '<div class="secao">Fotos e áudios</div>' + anexosHtml(D.arquivos[r.id] || []);
@@ -1382,7 +1401,8 @@ const VERSAO_ADMIN = '4';
     $('mais-corpo').innerHTML = '<div class="secao">Cuidar</div><div class="menu-lista">' +
       `<button type="button" data-ir="lixo"><span class="ic">🗑️</span>Excluídos<span class="x">${prox != null ? '⏳ próximo em ' + plural(prox, '1 dia', '# dias') : 'vazio'} ${badge(lixo.length)}</span></button>` +
       `<button type="button" data-ir="melh"><span class="ic">🐞</span>Melhorias<span class="x">${melh ? '' : 'nada novo'} ${badge(melh)}</span></button>` +
-      `<button type="button" data-ir="ia"><span class="ic">🤖</span>IA<span class="x">${fila ? plural(fila, '1 na fila', '# na fila') : 'fila vazia'}</span></button></div>` +
+      `<button type="button" data-ir="ia"><span class="ic">🤖</span>IA<span class="x">${fila ? plural(fila, '1 na fila', '# na fila') : 'fila vazia'}</span></button>` +
+      `<button type="button" data-ir="avisos"><span class="ic">🔔</span>Avisos no celular<span class="x">${AV.ligadoAqui ? 'ligado neste celular' : 'pedidos, senhas e cadastros'}</span></button></div>` +
       '<div class="secao">Configurar</div><div class="menu-lista">' +
       '<button type="button" data-ir="listas"><span class="ic">🏷️</span>Listas<span class="x">categorias e pagamentos</span></button>' +
       '<button type="button" data-ir="convite"><span class="ic">🔗</span>Link de convite e endereço do app<span class="x">›</span></button>' +
@@ -1636,6 +1656,16 @@ const VERSAO_ADMIN = '4';
       : '<div class="alerta-caixa vermelho" style="margin-top:12px"><span>✕ A propriedade GEMINI_API_KEY não foi criada no Apps Script.</span></div>';
     const sefaz = ia.ultimaSefaz;
     const motivo = sefaz ? (sefaz.ok ? 'dados lidos (sem usar a IA)' : ({ nao_encontrada: 'nota ainda não estava no site (a IA leu a foto)', desconhecido: 'página num formato desconhecido (a IA leu a foto e o texto)', sem_dados: 'a página não trouxe a nota (a IA leu a foto)', erro: 'site com problema: ' + (sefaz.mensagem || '') + ' (a IA leu a foto)' }[sefaz.motivo] || sefaz.motivo)) : '';
+    // v5: quantos pedidos foram feitos à IA (cada pedido ao Gemini conta 1, mesmo com erro)
+    if (ia.usos) {
+      const u = ia.usos;
+      const n = (x) => Number(x || 0).toLocaleString('pt-BR');
+      html = '<div class="contadores-ia">' +
+        `<div class="cont"><small>Usos da IA hoje</small><b>${n(u.hoje)}</b><span>desde 0h${u.hojeErros ? ' · ' + plural(u.hojeErros, '1 deu erro', '# deram erro') : ' · nenhum erro'}</span></div>` +
+        `<div class="cont"><small>Usos da IA no total</small><b>${n(u.total)}</b><span>${u.desde ? 'desde ' + new Date(u.desde).toLocaleDateString('pt-BR') : 'desde a versão 12'}` +
+        `${u.totalErros ? ' · ' + plural(u.totalErros, '1 deu erro', '# deram erro') : ''}</span></div></div>` +
+        '<p class="dica-txt" style="margin:8px 4px 0">Cada pedido enviado ao Gemini conta 1, mesmo quando dá erro. O limite grátis do Google zera por volta das 5h (horário de Brasília).</p>' + html;
+    }
     html += '<div class="caixa"><h4>Situação</h4>' +
       `<div class="lin"><span>Última leitura que deu certo</span><span class="sub" style="text-align:right">${ia.ultimoSucesso ? quandoCurto(ia.ultimoSucesso.quando) + '<br>' + esc(ia.ultimoSucesso.detalhe) : '—'}</span></div>` +
       `<div class="lin"><span>Último problema</span><span class="sub" style="text-align:right">${ia.ultimoErro ? quandoCurto(ia.ultimoErro.quando) + '<br>' + esc(ia.ultimoErro.detalhe) : '—'}</span></div>` +
@@ -1741,6 +1771,137 @@ const VERSAO_ADMIN = '4';
 
   // ---------------- Aparelhos conectados (deste app) ----------------
   let SESSOES = null;
+  // ---------------- v5: Avisos no celular (Web Push, grátis) ----------------
+  const AV = { ligadoAqui: false, abrirDepois: '' };
+  try { AV.abrirDepois = new URLSearchParams(location.search).get('abrir') || ''; } catch (e) { AV.abrirDepois = ''; }
+  try { AV.ligadoAqui = localStorage.getItem('adm_avisos') === '1'; } catch (e) { AV.ligadoAqui = false; }
+  const TIPOS_AVISO = [
+    ['melhoria', '🐞 Pedido de melhoria ou correção', ''],
+    ['senha', '🔑 Pedido de código para trocar a senha', 'você manda o código pelo WhatsApp'],
+    ['cadastro', '👤 Pessoa excluída pedindo para voltar', 'você aceita ou recusa em Pessoas']
+  ];
+  const suportaAvisos = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+  function chaveB64(b64) {
+    const p = (b64 + '='.repeat((4 - b64.length % 4) % 4)).replace(/-/g, '+').replace(/_/g, '/');
+    const bin = atob(p);
+    return Uint8Array.from(bin, c => c.charCodeAt(0));
+  }
+  async function inscricaoAtual() {
+    if (!suportaAvisos()) return null;
+    try {
+      const reg = await Promise.race([navigator.serviceWorker.ready, new Promise(ok => setTimeout(() => ok(null), 4000))]);
+      return reg ? await reg.pushManager.getSubscription() : null;
+    } catch (e) { return null; }
+  }
+  function marcarLigado(sim) { AV.ligadoAqui = !!sim; guardar('adm_avisos', sim ? '1' : null); }
+  RENDER.avisos = () => {
+    $('avisos-sub').textContent = 'chegam mesmo com o app fechado';
+    $('avisos-corpo').innerHTML = '<p class="dica-txt" style="margin:16px 4px">Carregando…</p>';
+    desenharAvisos();
+    return true;
+  };
+  async function desenharAvisos() {
+    let st;
+    try { st = await chamar('admAvisos'); } catch (e) {
+      $('avisos-corpo').innerHTML = `<div class="alerta-caixa vermelho" style="margin-top:12px"><span>${esc(/desconhecida/i.test(erroMsg(e)) ? 'O servidor ainda não tem os avisos no celular. Atualize o código do servidor (v12).' : erroMsg(e))}</span></div>`;
+      return;
+    }
+    if (TELA !== 'avisos') return;
+    AV.st = st;
+    const meuId = await AdminFundo.lerConfig('avisosId', '');
+    const sub = await inscricaoAtual();
+    const meu = sub ? st.aparelhos.find(a => a.id === meuId) : null;
+    marcarLigado(!!meu);
+    const perm = suportaAvisos() ? Notification.permission : 'nao';
+    let html = '<div class="caixa" style="margin-top:12px">';
+    if (!suportaAvisos()) {
+      html += '<div class="alerta-caixa vermelho"><span>Este navegador não recebe avisos. No celular, use o app instalado pelo Google Chrome.</span></div>';
+    } else if (perm === 'denied') {
+      html += '<div class="alerta-caixa vermelho"><span>As notificações deste app estão bloqueadas. Libere nas configurações do Chrome (Notificações) ou no cadeado ao lado do endereço, e volte aqui.</span></div>';
+    } else if (meu) {
+      html += `<div class="av-status">✅ Este celular recebe avisos (${esc(meu.aparelho || 'este aparelho')}).</div><h4>Avisar quando chegar</h4>` +
+        TIPOS_AVISO.map(([k, t, s]) => `<button type="button" class="av-lin" data-av-tipo="${k}" role="switch" aria-checked="${meu.tipos[k]}"><span>${t}${s ? `<small>${s}</small>` : ''}</span>` +
+          `<span class="chave${meu.tipos[k] ? ' on' : ''}"></span></button>`).join('') +
+        '<div class="botoes-linha"><button class="botao pequeno" type="button" data-av-teste>Mandar um aviso de teste</button></div><div data-av-msg></div>';
+    } else {
+      html += '<h4>Avisos neste celular</h4><p class="dica-txt">Receba um aviso no celular, mesmo com o app fechado, quando chegar um pedido de melhoria, um pedido de código de senha ou um pedido de cadastro de quem foi excluído.</p>' +
+        '<button class="botao primario" type="button" data-av-ligar>🔔 Ligar os avisos neste celular</button><div data-av-msg></div>';
+    }
+    html += '</div>';
+    html += '<div class="caixa"><h4>Aparelhos que recebem avisos</h4>' + (st.aparelhos.length ? st.aparelhos.map(a => `<div class="lin"><div>📱 ${esc(a.aparelho || 'Aparelho')}` +
+      `<div class="sub">${a.id === (meu && meu.id) ? 'este aparelho · ' : ''}desde ${a.criadoEm ? new Date(a.criadoEm).toLocaleDateString('pt-BR') : '—'}` +
+      `${a.ultimoErro ? ' · <span class="erro-txt">' + esc(a.ultimoErro) + '</span>' : ''}</div></div>` +
+      `<button class="botao pequeno" type="button" data-av-desligar="${esc(a.id)}">Desligar</button></div>`).join('') : '<p class="dica-txt">Nenhum aparelho ainda.</p>') + '</div>' +
+      '<p class="dica-txt" style="margin:10px 4px">Cada aparelho liga os avisos uma vez (o Chrome pergunta se pode mostrar notificações). No celular, o ícone do app fica marcado enquanto o aviso não for aberto.</p>';
+    $('avisos-corpo').innerHTML = html;
+  }
+  async function ligarAvisos(b) {
+    const msg = (t, erro) => { const m = $('avisos-corpo').querySelector('[data-av-msg]'); if (m) m.innerHTML = `<p class="${erro ? 'erro-txt' : 'ok-txt'}">${esc(t)}</p>`; };
+    b.disabled = true;
+    try {
+      const perm = await Notification.requestPermission();
+      if (perm !== 'granted') { msg('Sem a permissão de notificações, os avisos não aparecem.', true); return; }
+      const st = AV.st || await chamar('admAvisos');
+      const reg = await navigator.serviceWorker.ready;
+      let sub = await reg.pushManager.getSubscription();
+      const chave = chaveB64(st.publica);
+      if (sub && sub.options && sub.options.applicationServerKey) {
+        const atual = new Uint8Array(sub.options.applicationServerKey);
+        if (atual.length !== chave.length || atual.some((x, i) => x !== chave[i])) { await sub.unsubscribe(); sub = null; } // a chave do servidor mudou
+      }
+      if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: chave });
+      const r = await chamar('admAvisosLigar', { endpoint: sub.endpoint, aparelho: descricaoAparelho(), id: await AdminFundo.lerConfig('avisosId', '') });
+      await AdminFundo.gravarConfig('chaveAvisos', r.chave);
+      await AdminFundo.gravarConfig('avisosId', r.id);
+      marcarLigado(true);
+      aviso('Avisos ligados neste celular 🔔');
+      await desenharAvisos();
+    } catch (e) {
+      msg('Não foi possível ligar os avisos: ' + erroMsg(e), true);
+    } finally {
+      b.disabled = false;
+    }
+  }
+  $('avisos-corpo').addEventListener('click', async (e) => {
+    const lig = e.target.closest('[data-av-ligar]');
+    if (lig) { ligarAvisos(lig); return; }
+    const tp = e.target.closest('[data-av-tipo]');
+    if (tp) {
+      const id = await AdminFundo.lerConfig('avisosId', '');
+      const on = tp.getAttribute('aria-checked') !== 'true';
+      if (await tentar(chamar('admAvisosTipos', id, { [tp.dataset.avTipo]: on }), on ? 'Aviso ligado.' : 'Aviso desligado.')) desenharAvisos();
+      return;
+    }
+    if (e.target.closest('[data-av-teste]')) {
+      const id = await AdminFundo.lerConfig('avisosId', '');
+      const r = await tentar(chamar('admAvisosTeste', id));
+      if (r && r.ok) aviso('Aviso de teste enviado. Ele aparece em alguns segundos.');
+      else if (r) { aviso(r.removido ? 'O celular não recebe mais avisos. Ligue de novo.' : 'O aviso não saiu (' + (r.mensagem || 'erro ' + r.codigo) + ').', 5000); if (r.removido) desenharAvisos(); }
+      return;
+    }
+    const d = e.target.closest('[data-av-desligar]');
+    if (d) {
+      const meuId = await AdminFundo.lerConfig('avisosId', '');
+      if (!(await tentar(chamar('admAvisosDesligar', d.dataset.avDesligar), 'Avisos desligados.'))) return;
+      if (d.dataset.avDesligar === meuId) {
+        const sub = await inscricaoAtual();
+        if (sub) { try { await sub.unsubscribe(); } catch (x) { /* já saiu */ } }
+        await AdminFundo.gravarConfig('chaveAvisos', null);
+        await AdminFundo.gravarConfig('avisosId', null);
+        marcarLigado(false);
+      }
+      desenharAvisos();
+    }
+  });
+  /** Tocou no aviso: abre a tela certa (pedidos de melhoria, de senha ou de cadastro). */
+  function abrirPeloAviso(dest) {
+    const tela = { melhorias: 'melh', senhas: 'pessoas', pessoas: 'pessoas', avisos: 'avisos' }[dest];
+    if (!tela) return;
+    if (PORTAO || TELA === 'entrar' || !D) { AV.abrirDepois = dest; return; }
+    AV.abrirDepois = '';
+    ir(tela);
+  }
+
   RENDER.aparelhos = () => {
     $('aparelhos-sub').textContent = 'onde o app do administrador está aberto';
     if (!SESSOES) { $('aparelhos-corpo').innerHTML = '<div class="vazio-adm">Carregando…</div>'; carregarSessoes(); return; }
@@ -1849,9 +2010,14 @@ const VERSAO_ADMIN = '4';
   let DIGITAL_FALHOU = false;
   function liberarApp() {
     PORTAO = false;
-    history.replaceState({ tela: 'inicio', d: 0 }, '');
+    history.replaceState({ tela: 'inicio', d: 0 }, '', location.pathname);
     mostrar('inicio');
-    carregar();
+    carregar().then(depoisDeEntrar);
+  }
+  /** v5: tocou num aviso com o app fechado (abre a tela dele) e os pedidos do 🐞 que ficaram esperando. */
+  function depoisDeEntrar() {
+    if (AV.abrirDepois) abrirPeloAviso(AV.abrirDepois);
+    AdminFundo.pendentes().then(l => { if (l.length) enviarPedidosFundo(null); }).catch(() => { /* opcional */ });
   }
   function modoEntrar(digital) {
     $('ent-digital').classList.toggle('oculto', !digital);
@@ -1961,6 +2127,7 @@ const VERSAO_ADMIN = '4';
       mostrar('inicio');
       oferecerDigital();
       await carregar();
+      depoisDeEntrar(); // v5
     } catch (e) {
       $('ent-erro').textContent = erroMsg(e);
     } finally {
@@ -2031,7 +2198,7 @@ const VERSAO_ADMIN = '4';
     'veiculo-editar': ['A9', 'Editar veículo'], gasto: ['A10', 'Gasto do veículo'], 'gasto-editar': ['A11', 'Editar gasto do veículo'],
     entrar: ['A19', 'Entrar'],
     mais: ['A12', 'Mais'], lixo: ['A13', 'Lixeira'], melh: ['A14', 'Melhorias'], ia: ['A15', 'IA (uso e chave)'], listas: ['A16', 'Listas'],
-    convite: ['A17', 'Convite'], aparelhos: ['A18', 'Aparelhos conectados']
+    convite: ['A17', 'Convite'], aparelhos: ['A18', 'Aparelhos conectados'], avisos: ['A20', 'Avisos no celular']
   };
   const SVG_BUG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M20 8h-2.81a5.985 5.985 0 0 0-1.82-1.96L17 4.41 15.59 3l-2.17 2.17a6.002 6.002 0 0 0-2.83 0L8.41 3 7 4.41l1.62 1.63C7.88 6.55 7.26 7.22 6.81 8H4v2h2.09c-.05.33-.09.66-.09 1v1H4v2h2v1c0 .34.04.67.09 1H4v2h2.81c1.04 1.79 2.97 3 5.19 3s4.15-1.21 5.19-3H20v-2h-2.09c.05-.33.09-.66.09-1v-1h2v-2h-2v-1c0-.34-.04-.67-.09-1H20V8zm-4 7c0 2.21-1.79 4-4 4s-4-1.79-4-4v-4c0-2.21 1.79-4 4-4s4 1.79 4 4v4zm-6-1h4v2h-4v-2zm0-4h4v2h-4v-2z"/></svg>';
   function telaMelhoria() {
@@ -2186,33 +2353,67 @@ const VERSAO_ADMIN = '4';
       if (Gravador.gravando()) await parar();
       const texto = (q('#pm-texto').value || '').trim();
       if (!pedido.audio && !texto) { erro('Grave um áudio ou escreva o que aconteceu.'); return; }
-      const b = q('[data-pm-enviar]');
-      b.disabled = true;
-      b.textContent = 'Enviando…';
+      // v5: a janela fecha na hora; o pedido fica guardado e vai com qualquer internet (mesmo com o app fechado)
+      const registro = { id: pedido.id, criadoEm: Date.now(), tela: pedido.tela.num, nomeTela: pedido.tela.nome, texto, duracao: pedido.duracao || 0,
+        versaoApp: 'admin ' + VERSAO_ADMIN, aparelho: descricaoAparelho(), audio: pedido.audio || null, imagem: pedido.imagem || null,
+        fotos: pedido.fotos.map(f => f.blob) };
       try {
-        const melhoria = { id: pedido.id, criadoEm: Date.now(), tela: pedido.tela.num, nomeTela: pedido.tela.nome, texto, duracao: pedido.duracao || 0,
-          versaoApp: 'admin ' + VERSAO_ADMIN, aparelho: descricaoAparelho() };
-        if (pedido.audio) melhoria.audio = { mime: pedido.audio.type || 'audio/webm', base64: await blobParaBase64(pedido.audio) };
-        if (pedido.imagem) melhoria.imagem = { mime: 'image/jpeg', base64: await blobParaBase64(pedido.imagem) };
-        if (pedido.fotos.length) {
-          melhoria.fotos = [];
-          for (const f of pedido.fotos) melhoria.fotos.push({ mime: f.blob.type || 'image/jpeg', base64: await blobParaBase64(f.blob) });
-        }
-        const r = await api('melhoria', { melhoria });
-        if (PED !== pedido) return;
-        janelaAberta.aoFechar = null;
-        fecharJanela();
-        descartarPedido();
-        aviso(`Obrigado! Pedido nº ${r.numero} registrado em Melhorias.`, 4000);
-        if (D) carregar({ silencioso: true });
+        await AdminFundo.enfileirar(registro);
       } catch (e) {
-        if (PED !== pedido) return;
-        b.disabled = false;
-        b.textContent = 'Enviar';
-        erro(erroMsg(e));
+        erro('Não foi possível guardar o pedido: ' + erroMsg(e));
+        return;
       }
+      if (PED !== pedido) return;
+      janelaAberta.aoFechar = null;
+      fecharJanela();
+      descartarPedido();
+      enviarPedidosFundo(registro);
     };
   }
+  // ---- v5: envio do pedido em segundo plano, com a barrinha embaixo ----
+  function resumoDoPedido(m) {
+    const partes = [];
+    if (m.audio) partes.push('áudio de ' + fmtDur(Math.round(m.duracao || 0)));
+    const n = (m.fotos || []).length;
+    if (n) partes.push(n + (n === 1 ? ' foto' : ' fotos'));
+    return partes.length ? ' (' + partes.join(' e ') + ')' : '';
+  }
+  let relogioPedido = null;
+  async function enviarPedidosFundo(registro) {
+    clearTimeout(relogioPedido);
+    if (registro) barraFila(`Enviando seu pedido${resumoDoPedido(registro)}… Pode continuar usando ou fechar o app.`);
+    const agendado = await AdminFundo.agendar();
+    let r = { semRede: !navigator.onLine };
+    if (navigator.onLine) { try { r = await AdminFundo.enviarTodos(); } catch (e) { r = { semRede: true }; } }
+    const resto = await AdminFundo.pendentes();
+    if (registro && !resto.some(x => x.id === registro.id)) {
+      barraFila(`✓ Pedido${r.numeros && r.numeros.length ? ' nº ' + r.numeros[r.numeros.length - 1] : ''} registrado em Melhorias. Obrigado!`, true);
+      relogioPedido = setTimeout(() => barraFila(''), 4000);
+      if (D) carregar({ silencioso: true });
+      return;
+    }
+    if (!registro && !resto.length) { if (r.enviados) { barraFila(`✓ ${r.enviados === 1 ? 'Pedido registrado' : r.enviados + ' pedidos registrados'} em Melhorias.`, true); relogioPedido = setTimeout(() => barraFila(''), 4000); } return; }
+    if (r.semRede) {
+      barraFila('📴 Sem internet agora. Seu pedido está guardado e vai sozinho quando a internet voltar' + (agendado ? ', mesmo com o app fechado.' : ' (com o app aberto).'), false);
+    } else if (r.erros && r.erros.length) {
+      barraFila('⚠️ Não deu para enviar o pedido agora (' + (r.erros[0].mensagem || r.erros[0].codigo) + '). Ele está guardado e o app tenta de novo.', false);
+    } else return;
+    relogioPedido = setTimeout(() => barraFila(''), 9000);
+  }
+  window.addEventListener('online', () => { AdminFundo.pendentes().then(l => { if (l.length) enviarPedidosFundo(null); }); });
+  if (navigator.serviceWorker) {
+    navigator.serviceWorker.addEventListener('message', (ev) => {
+      const d = ev.data || {};
+      if (d.tipo === 'pedidosEnviados' && d.enviados) {
+        barraFila(`✓ ${d.enviados === 1 ? 'Pedido registrado' : d.enviados + ' pedidos registrados'} em Melhorias.`, true);
+        clearTimeout(relogioPedido);
+        relogioPedido = setTimeout(() => barraFila(''), 4000);
+        if (D) carregar({ silencioso: true });
+      }
+      if (d.tipo === 'abrir') abrirPeloAviso(d.abrir);
+    });
+  }
+
   function descartarPedido() {
     const pedido = PED;
     if (!pedido) return;
