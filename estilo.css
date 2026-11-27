@@ -837,3 +837,42 @@ html.fundo-travado, html.fundo-travado body { overflow: hidden; }
 .chave::after { content: ''; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.25); transition: left .15s; }
 .chave.on { background: #1f7a45; } .chave.on::after { left: 23px; }
 .botoes-linha { margin-top: 10px; }
+
+/* ---------- v6: segurar um item (menu colado nele) ---------- */
+.cartao, .pessoa { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+.fundo-adm.seg-fundo { background: rgba(15, 25, 40, .48); display: block; padding: 0; }
+.seg-alto { position: relative; z-index: 51; box-shadow: 0 10px 28px rgba(5, 20, 40, .40); background: #fff !important; pointer-events: none; }
+.seg-menu { position: fixed; right: 14px; width: 270px; max-width: calc(100vw - 28px); background: #fff; border-radius: 16px; box-shadow: 0 12px 34px rgba(5, 20, 40, .42);
+  overflow: hidden; animation: seg-entra .14s ease-out; }
+@keyframes seg-entra { from { opacity: 0; transform: scale(.96); } to { opacity: 1; transform: none; } }
+.seg-menu button { display: flex; align-items: center; gap: 13px; width: 100%; border: 0; background: #fff; padding: 15px 18px; font: inherit; font-size: 17px;
+  font-weight: 700; color: var(--azul); text-align: left; cursor: pointer; }
+.seg-menu button:active { background: #eef4f9; }
+.seg-menu button + button { border-top: 1px solid #edf1f5; }
+.seg-menu .ic { font-size: 19px; width: 24px; text-align: center; flex: none; }
+.seg-menu .perigo { color: var(--vermelho); }
+.seg-menu small { display: block; font-size: 12.5px; font-weight: 600; color: var(--cinza); margin-top: 2px; }
+/* ver: o lápis no alto */
+.lapis-topo { font-size: 20px; }
+.ver-dica-adm { margin: 16px 16px 24px; font-size: 13.5px; color: var(--cinza); text-align: center; }
+.botao.largo-adm { width: 100%; margin: 0 0 18px; }
+/* Pessoas: o que entra na contagem */
+.pessoa .s.conta { color: #3d556f; margin-top: 3px; }
+/* editar veículo: tudo */
+.aviso-silencio { background: #eef4f9; border: 1px solid #cfdeec; color: #1d3a5c; border-radius: 12px; padding: 10px 12px; font-size: 14px; line-height: 1.42; margin: 12px 0 4px; }
+.secao-ed { font-size: 13px; font-weight: 800; color: var(--cinza); text-transform: uppercase; letter-spacing: .03em; margin: 20px 0 6px; }
+.secao-ed small { text-transform: none; font-weight: 600; letter-spacing: 0; }
+.pn-ed { background: #fff; border: 1px solid var(--borda); border-radius: 14px; padding: 4px 12px; }
+.pn-lin { display: grid; grid-template-columns: 1fr 118px 96px; gap: 8px; align-items: center; padding: 8px 0; border-top: 1px solid #eef2f6; }
+.pn-lin:first-child, .pn-lin.cab + .pn-lin { border-top: 0; }
+.pn-lin.cab { padding: 8px 0 0; font-size: 12px; font-weight: 800; color: var(--cinza); text-transform: uppercase; letter-spacing: .03em; }
+.pn-lin b { font-size: 14.5px; }
+.pn-lin input { margin: 0 !important; min-height: 40px; padding: 6px 8px !important; font-size: 14px !important; }
+.fotos-ed { display: flex; gap: 12px; flex-wrap: wrap; padding-top: 6px; }
+.fotos-ed .ft { position: relative; }
+.fotos-ed .ft .anexo { width: 96px; height: 96px; }
+.fotos-ed .ft .x { position: absolute; top: -8px; right: -8px; width: 28px; height: 28px; border-radius: 50%; border: 0; background: var(--vermelho); color: #fff; font-size: 14px;
+  font-weight: 800; display: flex; align-items: center; justify-content: center; box-shadow: 0 1px 4px rgba(0,0,0,.3); cursor: pointer; padding: 0; }
+.fotos-ed .add { width: 96px; height: 96px; border-radius: 12px; border: 2px dashed #b9c7d5; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  color: #2f5f8f; font-weight: 700; font-size: 13px; gap: 2px; background: #fff; cursor: pointer; margin: 0; }
+.fotos-ed .add span { font-size: 24px; }

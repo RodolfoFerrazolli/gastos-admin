@@ -8,7 +8,7 @@
 //  o 🐞 de pedido de correção ou melhoria; a bolinha branca em cima de
 //  "Filtros" saiu; com uma janela aberta, a tela de trás não rola.
 // =====================================================================
-const VERSAO_ADMIN = '5';
+const VERSAO_ADMIN = '6';
 
 (() => {
   'use strict';
@@ -324,7 +324,7 @@ const VERSAO_ADMIN = '5';
   const RAIZES = ['inicio', 'lanc', 'pessoas', 'veiculos', 'mais'];
   const ABA_DE = {
     'lanc-ver': 'lanc', 'lanc-editar': 'lanc', pessoa: 'pessoas', veiculo: 'veiculos', gasto: 'veiculos', 'gasto-editar': 'veiculos',
-    'veiculo-editar': 'veiculos', lixo: 'mais', melh: 'mais', ia: 'mais', listas: 'mais', convite: 'mais', aparelhos: 'mais'
+    'veiculo-editar': 'veiculos', rel: 'veiculos', 'rel-gastos': 'veiculos', 'rel-desempenho': 'veiculos', 'rel-pneus': 'veiculos', lixo: 'mais', melh: 'mais', ia: 'mais', listas: 'mais', convite: 'mais', aparelhos: 'mais'
   };
   let TELA = 'entrar';
   let DADOS = {};
@@ -332,6 +332,8 @@ const VERSAO_ADMIN = '5';
   let abaPendente = null;
   let irDepois = null; // tela para abrir depois de voltar para a aba (menu lateral do computador)
   let ignorarPop = 0;
+  let depoisDoPop = []; // v6: o que fazer depois que o "voltar" de uma janela fechada terminar
+  function quandoVoltou(fn) { if (ignorarPop > 0) depoisDoPop.push(fn); else fn(); }
   const rolagem = {};
 
   function mostrar(tela, dados = {}, { manterRolagem = false } = {}) {
@@ -371,8 +373,9 @@ const VERSAO_ADMIN = '5';
   }
   function voltar() { history.back(); }
   window.addEventListener('popstate', (e) => {
-    if (ignorarPop) { ignorarPop--; return; }
+    if (ignorarPop) { ignorarPop--; if (!ignorarPop && depoisDoPop.length) { const l = depoisDoPop; depoisDoPop = []; l.forEach(f => f()); } return; }
     if (visorAberto()) { fecharVisor(false); return; } // v3: a foto pode estar por cima de uma janela (ℹ️ do veículo)
+    if (typeof RelAdm !== 'undefined' && RelAdm.aoVoltarCelular()) return; // v6: janela do relatório (exportar)
     if (janelaAberta) { fecharJanela(true, true); return; }
     if (TELA === 'entrar') return;
     const st = e.state || { tela: 'inicio', d: 0 };
@@ -417,6 +420,60 @@ const VERSAO_ADMIN = '5';
     const y = window.scrollY;
     desenhar();
     window.scrollTo(0, y);
+  }
+
+  // ------------------------------------------------------------------
+  //  v6: segurar o dedo num item (meio segundo) abre um menu colado nele
+  // ------------------------------------------------------------------
+  let segurouEm = 0;
+  function aoSegurar(el, seletor, fn) {
+    let relogio = null; let x0 = 0; let y0 = 0;
+    const parar = () => { if (relogio) clearTimeout(relogio); relogio = null; };
+    el.addEventListener('pointerdown', (e) => {
+      if (e.button > 0) return;
+      const c = e.target.closest(seletor);
+      if (!c || !el.contains(c)) return;
+      x0 = e.clientX; y0 = e.clientY;
+      parar();
+      relogio = setTimeout(() => {
+        relogio = null;
+        segurouEm = Date.now();
+        try { if (navigator.vibrate) navigator.vibrate(25); } catch (er) { /* sem vibração */ }
+        fn(c);
+      }, 500);
+    });
+    el.addEventListener('pointermove', (e) => { if (relogio && Math.hypot(e.clientX - x0, e.clientY - y0) > 10) parar(); });
+    ['pointerup', 'pointercancel', 'pointerleave'].forEach(n => el.addEventListener(n, parar));
+    window.addEventListener('scroll', parar, { passive: true });
+    el.addEventListener('contextmenu', (e) => { if (e.target.closest(seletor)) e.preventDefault(); });
+    el.addEventListener('click', (e) => { if (Date.now() - segurouEm < 800) { e.stopImmediatePropagation(); e.preventDefault(); } }, true);
+  }
+  /** opcoes: [{ ic, texto, sub, perigo, acao }] */
+  function menuSegurar(cartao, opcoes) {
+    fecharJanela(true);
+    const raiz = $('janela');
+    raiz.innerHTML = '<div class="fundo-adm seg-fundo"><div class="seg-menu" role="menu">' +
+      opcoes.map((o, i) => `<button type="button" role="menuitem" data-i="${i}" class="${o.perigo ? 'perigo' : ''}"><span class="ic" aria-hidden="true">${o.ic}</span>` +
+        `<span>${esc(o.texto)}${o.sub ? `<small>${esc(o.sub)}</small>` : ''}</span></button>`).join('') + '</div></div>';
+    const fundo = raiz.firstChild;
+    const m = fundo.firstChild;
+    const limpar = () => cartao.classList.remove('seg-alto');
+    cartao.classList.add('seg-alto');
+    janelaAberta = { aoFechar: limpar };
+    history.pushState({ janela: true, tela: TELA, dados: DADOS, d: profundidade }, '');
+    fundo.addEventListener('click', (e) => { if (e.target === fundo) fecharJanela(); });
+    const r = cartao.getBoundingClientRect();
+    const baixo = r.bottom + 10 + m.offsetHeight < window.innerHeight - 80;
+    m.style.top = Math.max(10, baixo ? r.bottom + 10 : r.top - 10 - m.offsetHeight) + 'px';
+    m.addEventListener('click', (e) => {
+      const b = e.target.closest('button[data-i]');
+      if (!b) return;
+      const o = opcoes[Number(b.dataset.i)];
+      limpar();
+      janelaAberta.aoFechar = null;
+      fecharJanela();
+      quandoVoltou(o.acao);
+    });
   }
 
   // ------------------------------------------------------------------
@@ -751,6 +808,26 @@ const VERSAO_ADMIN = '5';
     const c = t.closest('[data-lanc]');
     if (c) ir('lanc-ver', { id: c.dataset.lanc });
   });
+  // v6: segurar um lançamento (ou um gasto 🚗 da lista): Editar / Excluir (ou Ver / Restaurar, se já foi excluído)
+  aoSegurar($('lanc-corpo'), '[data-lanc], [data-gasto]', (c) => {
+    if (c.dataset.gasto) {
+      const r = registroPorId(c.dataset.gasto);
+      if (!r) return;
+      if (r.excluido) { menuSegurar(c, [{ ic: '👁️', texto: 'Ver', acao: () => ir('gasto', { id: r.id }) }]); return; }
+      menuSegurar(c, [{ ic: '✏️', texto: 'Editar', acao: () => ir('gasto-editar', { id: r.id }) },
+        { ic: '🗑️', texto: 'Excluir', perigo: true, acao: () => excluirGasto(r.id) }]);
+      return;
+    }
+    const l = lancPorId(c.dataset.lanc);
+    if (!l) return;
+    if (l.excluido) {
+      menuSegurar(c, [{ ic: '👁️', texto: 'Ver', acao: () => ir('lanc-ver', { id: l.id }) },
+        { ic: '♻️', texto: 'Restaurar', acao: async () => { if (await tentar(chamar('admRestaurar', l.id), 'Lançamento restaurado.')) await carregar(); } }]);
+      return;
+    }
+    menuSegurar(c, [{ ic: '✏️', texto: 'Editar', acao: () => ir('lanc-editar', { id: l.id }) },
+      { ic: '🗑️', texto: 'Excluir', perigo: true, acao: () => excluirLanc(l.id) }]);
+  });
   function opcoesHtml(valores, atual, rotuloTodos) {
     return `<option value="">${rotuloTodos}</option>` + valores.map(v => `<option value="${esc(v.valor)}"${v.valor === atual ? ' selected' : ''}>${esc(v.rotulo)}</option>`).join('');
   }
@@ -820,21 +897,38 @@ const VERSAO_ADMIN = '5';
     }
     html += '<div class="secao">Fotos e áudio</div>' + anexosHtml(arqs);
     const podeLer = (l.status === 'aguardando_ia' || l.status === 'erro_ia') && !l.excluido && arqs.some(a => a.tipo === (l.origem === 'foto' ? 'foto' : 'audio'));
-    html += `<div class="acoes ${podeLer ? 'tres' : ''}">` +
-      (l.excluido ? '<button class="botao" type="button" data-restaurar>Restaurar</button>' : '<button class="botao perigo" type="button" data-excluir>Excluir</button>') +
-      (podeLer ? '<button class="botao" type="button" data-ler>🤖 Ler agora</button>' : '') +
-      '<button class="botao primario" type="button" data-editar>Editar</button></div>';
+    // v6: só para ver (o ✏️ no alto edita; o Excluir fica no menu de segurar e no fim da edição)
+    if (l.excluido) html += '<div class="acoes um"><button class="botao primario" type="button" data-restaurar>Restaurar</button></div>';
+    else if (podeLer) html += '<div class="acoes um"><button class="botao" type="button" data-ler>🤖 Ler agora</button></div>';
+    else html += '<p class="ver-dica-adm">Para mudar, toque no ✏️ lá em cima.</p>';
+    $('lanc-ver-editar').classList.toggle('oculto', !!l.excluido);
     $('lanc-ver-corpo').innerHTML = html;
     return true;
   };
+  $('lanc-ver-editar').onclick = () => { if (TELA === 'lanc-ver') ir('lanc-editar', { id: DADOS.id, deVer: true }); };
+  /** v6: excluir um lançamento (menu de segurar e fim da edição). Devolve true se excluiu. */
+  async function excluirLanc(id) {
+    const l = lancPorId(id);
+    if (!l) return false;
+    const txt = `Excluir o lançamento “${l.descricao || '(sem descrição)'}”${l.valorTotal != null ? ' (' + brl(l.valorTotal) + ')' : ''}${l.participante ? ' de ' + l.participante : ''}? ` +
+      'Ele vai para os Excluídos (30 dias para restaurar).';
+    if (!(await confirmar(txt, 'Excluir', { perigo: true }))) return false;
+    if (!(await tentar(chamar('admExcluir', id), 'Lançamento excluído.'))) return false;
+    await carregar();
+    return true;
+  }
+  /** v6: excluir um gasto do veículo. */
+  async function excluirGasto(id) {
+    const r = registroPorId(id);
+    if (!r) return false;
+    const t = TIPO_REG[r.tipo] || ['', r.tipo];
+    if (!(await confirmar(`Excluir ${t[1].toLowerCase()} de ${dataDia(r.data)}${r.tipo === 'galeria' ? '' : ' (' + brl(r.valor) + ')'}, lançado por ${r.participante}? Vai para os Excluídos (30 dias para restaurar).`, 'Excluir', { perigo: true }))) return false;
+    if (!(await tentar(chamar('admExcluirRegistro', r.id), 'Gasto excluído.'))) return false;
+    await carregar();
+    return true;
+  }
   $('lanc-ver-corpo').addEventListener('click', async (e) => {
     const id = DADOS.id;
-    if (e.target.closest('[data-editar]')) { ir('lanc-editar', { id }); return; }
-    if (e.target.closest('[data-excluir]')) {
-      if (!(await confirmar('Excluir este lançamento? Ele vai para os Excluídos (30 dias para restaurar).', 'Excluir', { perigo: true }))) return;
-      if (await tentar(chamar('admExcluir', id), 'Lançamento excluído.')) await carregar();
-      return;
-    }
     if (e.target.closest('[data-restaurar]')) {
       if (await tentar(chamar('admRestaurar', id), 'Lançamento restaurado.')) await carregar();
       return;
@@ -884,7 +978,8 @@ const VERSAO_ADMIN = '5';
       '<label>Itens</label><div class="item-cab"><span>Item</span><span>Qtd.</span><span>Valor</span><span></span></div>' +
       `<div id="le-itens">${(l.itens || []).map(itemEdHtml).join('')}</div><button class="mini-btn" type="button" id="le-add">+ Adicionar item</button>` +
       '<p class="dica-txt" id="le-soma"></p>' +
-      '<div class="acoes" style="margin:18px 0"><button class="botao" type="button" data-voltar-form>Cancelar</button><button class="botao primario" type="button" id="le-salvar">Salvar</button></div></div>';
+      '<div class="acoes" style="margin:18px 0 10px"><button class="botao" type="button" data-voltar-form>Cancelar</button><button class="botao primario" type="button" id="le-salvar">Salvar</button></div>' +
+      '<button class="botao perigo largo-adm" type="button" id="le-excluir">Excluir lançamento</button></div>';
     $('lanc-editar-corpo').innerHTML = html;
     travarBanco();
     somaItens();
@@ -917,6 +1012,10 @@ const VERSAO_ADMIN = '5';
     if (e.target.id === 'le-add') { $('le-itens').insertAdjacentHTML('beforeend', itemEdHtml()); return; }
     const ti = e.target.closest('[data-tirar-item]');
     if (ti) { ti.closest('.item-ed').remove(); somaItens(); return; }
+    if (e.target.id === 'le-excluir') { // v6: o Excluir fica no fim da edição
+      if (await excluirLanc(DADOS.id)) history.go(DADOS.deVer ? -2 : -1); // volta para a lista
+      return;
+    }
     if (e.target.id !== 'le-salvar') return;
     const l = lancPorId(DADOS.id);
     const dados = {
@@ -941,6 +1040,23 @@ const VERSAO_ADMIN = '5';
   }
   function linkConvite() { const c = D.convite || {}; return c.urlApp && c.codigo ? c.urlApp + '?codigo=' + encodeURIComponent(c.codigo) : ''; }
   function msgConvite() { return 'Oi! Este é o link do app de gastos da viagem: ' + linkConvite() + '\n\nAbra no Google Chrome, crie sua conta (nome, senha e WhatsApp) e toque em "Instalar".'; }
+  /**
+   * v6: quantos lançamentos a pessoa fez: os gastos + os do veículo (abastecimento, manutenção e despesas; a galeria não conta).
+   * Cada manutenção conta 1, com quantos itens tiver.
+   */
+  function contagemDe(c) {
+    const regs = (D.registros || []).filter(r => r.contaId === c.id && !r.excluido && r.tipo !== 'galeria');
+    const ab = regs.filter(r => r.tipo === 'abastecimento').length;
+    const man = regs.filter(r => r.tipo === 'manutencao').length;
+    const desp = regs.length - ab - man;
+    const g = Number(c.lancamentos) || 0;
+    const partes = [];
+    if (g) partes.push('🧾 ' + plural(g, '1 gasto', '# gastos'));
+    if (ab) partes.push('⛽ ' + plural(ab, '1 abastecimento', '# abastecimentos'));
+    if (man) partes.push('🔧 ' + plural(man, '1 manutenção', '# manutenções'));
+    if (desp) partes.push('📄 ' + plural(desp, '1 despesa do veículo', '# despesas do veículo'));
+    return { total: g + regs.length, gastos: g, ab, man, desp, regs, partes: (ab || man || desp) ? partes.join(' · ') : '' };
+  }
   RENDER.pessoas = () => {
     const contas = (D.contas || []).filter(c => !c.excluido).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
     $('pessoas-sub').textContent = plural(contas.length, '1 conta', '# contas');
@@ -965,10 +1081,14 @@ const VERSAO_ADMIN = '5';
     if (contas.length && !org) html += '<div class="alerta-caixa laranja coluna" style="margin-top:12px"><span><b>Escolha a conta do organizador</b> (a sua): abra a conta e toque em <b>Tornar organizador</b>. O organizador recebe no app os pedidos de senha, e o WhatsApp dele aparece para quem esqueceu a senha.</span></div>';
     else if (org && !org.whatsapp) html += `<div class="alerta-caixa laranja" style="margin-top:12px"><span>A conta do organizador (${esc(org.nome)}) ainda não tem WhatsApp.</span></div>`;
     html += '<div class="secao">Contas</div>';
-    html += contas.length ? contas.map(c => `<div class="pessoa" data-pessoa="${esc(c.id)}"><div class="av">${esc(iniciais(c.nome).toUpperCase())}</div>` +
-      `<div style="min-width:0"><div class="n">${esc(c.nome)}${c.organizador ? '<span class="org">★ Organizador</span>' : ''}</div>` +
-      `<div class="s">${c.whatsapp ? esc(zapTexto(c.whatsapp)) : '<span style="color:var(--vermelho)">sem WhatsApp</span>'} · ${plural(c.aparelhos.filter(a => a.conectado).length, '1 celular', '# celulares')}</div></div>` +
-      `<div class="d"><b>${c.lancamentos}</b>${c.lancamentos === 1 ? 'lançamento' : 'lançamentos'}</div></div>`).join('') : '<div class="vazio-adm">Nenhuma conta criada ainda.</div>';
+    html += contas.length ? contas.map((c) => {
+      const q = contagemDe(c); // v6: com os lançamentos dos veículos
+      return `<div class="pessoa" data-pessoa="${esc(c.id)}"><div class="av">${esc(iniciais(c.nome).toUpperCase())}</div>` +
+        `<div style="min-width:0"><div class="n">${esc(c.nome)}${c.organizador ? '<span class="org">★ Organizador</span>' : ''}</div>` +
+        `<div class="s">${c.whatsapp ? esc(zapTexto(c.whatsapp)) : '<span style="color:var(--vermelho)">sem WhatsApp</span>'} · ${plural(c.aparelhos.filter(a => a.conectado).length, '1 celular', '# celulares')}</div>` +
+        (q.partes ? `<div class="s conta">${q.partes}</div>` : '') + '</div>' +
+        `<div class="d"><b>${q.total}</b>${q.total === 1 ? 'lançamento' : 'lançamentos'}</div></div>`;
+    }).join('') : '<div class="vazio-adm">Nenhuma conta criada ainda.</div>';
     const link = linkConvite();
     html += '<div class="caixa"><h4>🔗 Link de convite</h4>' + (link
       ? `<p class="dica-txt">A pessoa só cria a conta, sem digitar o código.</p><div class="acoes" style="margin:6px 0 0"><button class="botao pequeno" type="button" data-copiar-convite>Copiar link</button>` +
@@ -1039,6 +1159,13 @@ const VERSAO_ADMIN = '5';
     html += '<div class="det">' +
       `<div class="lin"><span>Último acesso</span><span>${quandoCurto(c.ultimoAcesso)}</span></div>` +
       `<div class="lin"><span>Lançamentos</span><span><a href="#" data-ver-lanc>${c.lancamentos} · ${brl(total)} ›</a></span></div>` +
+      (() => { // v6: os lançamentos dos veículos também
+        const q = contagemDe(c);
+        if (!q.regs.length) return '';
+        const tot = q.regs.reduce((s2, r) => s2 + (Number(r.valor) || 0), 0);
+        return `<div class="lin"><span>Nos veículos</span><span>${[q.ab ? '⛽ ' + q.ab : '', q.man ? '🔧 ' + q.man : '', q.desp ? '📄 ' + q.desp : ''].filter(Boolean).join(' · ')} · ${brl(tot)}</span></div>` +
+          `<div class="lin"><span><b>Total de lançamentos</b></span><span><b>${q.total}</b></span></div>`;
+      })() +
       `<div class="lin"><span>Veículos</span><span>${veics.length ? veics.map(v => esc(nomeVeic(v))).join('<br>') : '—'}</span></div>` +
       `<div class="lin"><span>Senha alterada</span><span>${c.senhaAlteradaEm ? dataHora(c.senhaAlteradaEm) : '—'}</span></div></div>`;
     html += '<div class="acoes"><button class="botao" type="button" data-nova-senha>🔑 Definir nova senha</button>' +
@@ -1141,6 +1268,14 @@ const VERSAO_ADMIN = '5';
     const c = e.target.closest('[data-veiculo]');
     if (c) { VG = VF.tipo; ir('veiculo', { id: c.dataset.veiculo }); }
   });
+  // v6: segurar o veículo: Editar (tudo do cadastro) ou Relatório (as mesmas telas do app; a pessoa não fica sabendo)
+  aoSegurar($('veiculos-corpo'), '[data-veiculo]', (c) => {
+    const id = c.dataset.veiculo;
+    menuSegurar(c, [
+      { ic: '✏️', texto: 'Editar', sub: 'todas as informações do veículo', acao: () => ir('veiculo-editar', { id }) },
+      { ic: '📊', texto: 'Relatório', sub: 'as mesmas telas do app', acao: () => RelAdm.abrir(id) }
+    ]);
+  });
 
   // ---------------- Veículo ----------------
   // v4: manutenção com itens (qtd × valor de cada) e o desconto do abastecimento
@@ -1234,7 +1369,15 @@ const VERSAO_ADMIN = '5';
     const v = veiculoPorId(DADOS.id);
     if (!v) return;
     const vg = t.closest('[data-vg]');
-    if (vg) { VG = vg.dataset.vg; RENDER.veiculo(DADOS); return; }
+    if (vg) {
+      const fileira = vg.closest('.chips');
+      const x = fileira ? fileira.scrollLeft : 0; // v6: a fileira de abas fica onde você deixou
+      VG = vg.dataset.vg;
+      RENDER.veiculo(DADOS);
+      const nova = $('veiculo-corpo').querySelector('.chips');
+      if (nova) nova.scrollLeft = x;
+      return;
+    }
     const g = t.closest('[data-gasto]');
     if (g) { ir('gasto', { id: g.dataset.gasto }); return; }
     if (t.closest('[data-editar-veic]')) { ir('veiculo-editar', { id: v.id }); return; }
@@ -1263,24 +1406,122 @@ const VERSAO_ADMIN = '5';
   RENDER['veiculo-editar'] = ({ id }) => {
     const v = veiculoPorId(id);
     if (!v || v.excluido) return false;
+    $('veiculo-editar-titulo').textContent = 'Editar veículo';
     $('veiculo-editar-sub').textContent = 'Dono: ' + v.participante;
-    $('veiculo-editar-corpo').innerHTML = '<div class="conteudo-adm"><p class="dica-txt">A mudança chega aos celulares na próxima sincronização.</p>' +
+    // v6: tudo do cadastro (tanque, pneus da troca antiga e fotos também)
+    const ini = v.pneusInicio || {};
+    const dataBr = (iso) => { const p = String(iso || '').split('-'); return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : ''; };
+    const marcas = unicos(Object.values(ini).map(x => [x.marca, x.medida].filter(Boolean).join(' ')).filter(Boolean));
+    const pn = (k) => `<div class="pn-lin"><b>${NOMES_PNEU[k]}</b><input type="text" inputmode="numeric" placeholder="dd/mm/aaaa" data-pn-data="${k}" value="${esc(dataBr(ini[k] && ini[k].data))}">` +
+      `<input inputmode="numeric" placeholder="km" data-pn-km="${k}" value="${ini[k] && ini[k].km != null ? Number(ini[k].km).toLocaleString('pt-BR') : ''}"></div>`;
+    const fotos = (D.arquivos[v.id] || []).filter(a => a.tipo === 'foto');
+    $('veiculo-editar-corpo').innerHTML = '<div class="conteudo-adm"><div class="aviso-silencio">🔕 ' + esc(primeiroNome(v.participante) || 'A pessoa') +
+      ' recebe a mudança sozinha na próxima vez que o app sincronizar. Ela não é avisada.</div>' +
       `<div class="grade2"><div><label for="ve-montadora">Montadora</label><input id="ve-montadora" value="${esc(v.montadora)}"></div><div><label for="ve-modelo">Modelo</label><input id="ve-modelo" value="${esc(v.modelo)}"></div></div>` +
       `<div class="grade2"><div><label for="ve-ano">Ano</label><input id="ve-ano" inputmode="numeric" value="${esc(v.ano || '')}"></div><div><label for="ve-placa">Placa</label><input id="ve-placa" value="${esc(v.placa)}"></div></div>` +
-      `<label for="ve-cor">Cor</label><input id="ve-cor" value="${esc(v.cor || '')}">` +
-      `<label for="ve-obs">Observação <small>(até 1000 letras)</small></label><textarea id="ve-obs" maxlength="1000" rows="4">${esc(v.observacao || '')}</textarea>` +
+      `<div class="grade2"><div><label for="ve-cor">Cor</label><input id="ve-cor" value="${esc(v.cor || '')}"></div>` +
+      `<div><label for="ve-tanque">Tanque <small>(litros)</small></label><input id="ve-tanque" inputmode="decimal" value="${v.tanque ? String(v.tanque).replace('.', ',') : ''}"></div></div>` +
+      `<label for="ve-obs">Observação <small>(até 1000 letras)</small></label><textarea id="ve-obs" maxlength="1000" rows="3">${esc(v.observacao || '')}</textarea>` +
+      '<div class="secao-ed">🛞 Pneus: troca antiga</div><p class="dica-txt" style="margin:0 0 8px">A troca de antes de usar o app (a mesma de Relatório › Pneus › Informar uma troca antiga). ' +
+      'Deixe em branco o pneu que não tem.</p>' +
+      '<div class="pn-ed"><div class="pn-lin cab"><span></span><span>Data</span><span>Km</span></div>' + ['de', 'dd', 'te', 'td', 'estepe'].map(pn).join('') + '</div>' +
+      `<label for="ve-marca">Marca e medida <small>(da troca antiga)</small></label><input id="ve-marca" placeholder="Ex.: Goodyear Kelly Edge 165/70 R13" value="${esc(marcas[0] || '')}">` +
+      '<div class="secao-ed">📷 Fotos do veículo <small>(mudam na hora)</small></div><div class="fotos-ed">' +
+      fotos.map(a => `<div class="ft"><button class="anexo" type="button" data-arq="${esc(a.driveId)}" data-tipo="foto">📷<small>ver</small></button>` +
+        `<button class="x" type="button" data-tirar-foto="${esc(a.id)}" aria-label="Tirar a foto">✕</button></div>`).join('') +
+      '<label class="add" for="ve-foto"><span>＋</span>Adicionar</label><input type="file" id="ve-foto" accept="image/*" multiple hidden></div>' +
+      '<p class="erro" id="ve-erro"></p>' +
       '<div class="acoes" style="margin:18px 0"><button class="botao" type="button" data-voltar-form>Cancelar</button><button class="botao primario" type="button" id="ve-salvar">Salvar</button></div></div>';
     return true;
   };
+  /** v6: lê a foto, diminui (lado maior 1600 px) e manda para o veículo. */
+  function fotoParaBase64(arquivo) {
+    return new Promise((ok, erro) => {
+      const img = new Image();
+      const url = URL.createObjectURL(arquivo);
+      img.onload = () => {
+        const escala = Math.min(1, 1600 / Math.max(img.width, img.height));
+        const c = document.createElement('canvas');
+        c.width = Math.round(img.width * escala); c.height = Math.round(img.height * escala);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        URL.revokeObjectURL(url);
+        ok(c.toDataURL('image/jpeg', 0.85).split(',')[1]);
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); erro(new Error('Não deu para ler esta imagem.')); };
+      img.src = url;
+    });
+  }
+  $('veiculo-editar-corpo').addEventListener('change', async (e) => {
+    if (e.target.id !== 've-foto' || !e.target.files.length) return;
+    const id = DADOS.id;
+    const arqs = [...e.target.files];
+    let n = 0;
+    for (const f of arqs) {
+      try {
+        const base64 = await fotoParaBase64(f);
+        const fid = 'adm-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+        if (await tentar(chamar('admFotoVeiculo', id, { id: fid, base64, mime: 'image/jpeg' }))) n++;
+      } catch (err) { aviso(erroMsg(err), 5000); }
+    }
+    if (n) { aviso(n === 1 ? 'Foto adicionada.' : n + ' fotos adicionadas.'); await carregar(); }
+  });
   $('veiculo-editar-corpo').addEventListener('click', async (e) => {
     if (e.target.closest('[data-voltar-form]')) { voltar(); return; }
+    const tf = e.target.closest('[data-tirar-foto]');
+    if (tf) {
+      if (!(await confirmar('Tirar esta foto do veículo?', 'Tirar a foto', { perigo: true }))) return;
+      if (await tentar(chamar('admExcluirFotoVeiculo', tf.dataset.tirarFoto), 'Foto tirada.')) await carregar();
+      return;
+    }
     if (e.target.id !== 've-salvar') return;
-    const d = { montadora: $('ve-montadora').value, modelo: $('ve-modelo').value, ano: Number($('ve-ano').value) || '', placa: $('ve-placa').value, cor: $('ve-cor').value, observacao: $('ve-obs').value };
+    $('ve-erro').textContent = '';
+    // pneus da troca antiga: dd/mm/aaaa e km
+    const pneus = {};
+    let erroPneu = '';
+    // "Goodyear Kelly Edge 165/70 R13": a medida (165/70 R13) vai separada, como no app
+    const mm = /(\d{3}\s*\/\s*\d{2}\s*Z?R\s*\d{2}(?:[.,]\d)?)\s*$/i.exec($('ve-marca').value.trim());
+    const medida = mm ? mm[1].replace(/\s+/g, ' ').toUpperCase().replace(/\s*\/\s*/, '/') : '';
+    const marca = (mm ? $('ve-marca').value.trim().slice(0, mm.index) : $('ve-marca').value).trim();
+    ['de', 'dd', 'te', 'td', 'estepe'].forEach((k) => {
+      const tx = $('veiculo-editar-corpo').querySelector(`[data-pn-data="${k}"]`).value.trim();
+      const kmTx = $('veiculo-editar-corpo').querySelector(`[data-pn-km="${k}"]`).value.replace(/\D/g, '');
+      if (!tx && !kmTx) return;
+      let data = '';
+      if (tx) {
+        const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(tx);
+        if (!m) { erroPneu = `Data do pneu (${NOMES_PNEU[k]}) inválida: use dd/mm/aaaa.`; return; }
+        data = `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+      }
+      pneus[k] = { data, km: kmTx ? Number(kmTx) : null };
+      if (marca) pneus[k].marca = marca;
+      if (medida) pneus[k].medida = medida;
+    });
+    if (erroPneu) { $('ve-erro').textContent = erroPneu; return; }
+    const tq = lerNumero($('ve-tanque').value);
+    const d = { montadora: $('ve-montadora').value, modelo: $('ve-modelo').value, ano: Number($('ve-ano').value) || '', placa: $('ve-placa').value, cor: $('ve-cor').value,
+      observacao: $('ve-obs').value, tanque: tq == null ? '' : tq, pneusInicio: Object.keys(pneus).length ? pneus : null };
     e.target.disabled = true;
     const ok = await tentar(chamar('admSalvarVeiculo', DADOS.id, d), 'Veículo salvo.');
     e.target.disabled = false;
     if (ok) { await carregar(); voltar(); }
   });
+
+  // ---------------- v6: Relatório do veículo (as mesmas telas do app) ----------------
+  function relatorioDe(prepararFn, idSub) {
+    return (dados) => {
+      const v = veiculoPorId(dados.veiculoId);
+      if (!v || v.excluido) return false;
+      Promise.resolve(prepararFn(dados)).then(() => {
+        const sub = $(idSub);
+        if (sub) sub.textContent = `${v.modelo} · ${v.placa} · de ${v.participante}`;
+      }).catch((e) => aviso('Não deu para montar o relatório: ' + erroMsg(e), 5000));
+      return true;
+    };
+  }
+  RENDER.rel = relatorioDe(d => Relatorio.preparar('v-relatorio', d), 'rl-sub');
+  RENDER['rel-gastos'] = relatorioDe(d => Relatorio.preparar('v-gastos', d), 'rg-sub');
+  RENDER['rel-desempenho'] = relatorioDe(d => Relatorio.preparar('v-desempenho', d), 'rd-sub');
+  RENDER['rel-pneus'] = relatorioDe(d => Pneus.preparar(d), 'rp-sub');
 
   // ---------------- Gasto do veículo (ver) ----------------
   // v5: pneus trocados e o abastecimento que não cabe no tanque
@@ -1319,24 +1560,21 @@ const VERSAO_ADMIN = '5';
     html += '<div class="secao">Fotos e áudios</div>' + anexosHtml(D.arquivos[r.id] || []);
     html += r.excluido ? (r.excluidoCom ? '<p class="dica-txt" style="margin:14px">Este gasto foi excluído junto com o veículo ou a conta: ele volta ao restaurar.</p>'
       : '<div class="acoes um"><button class="botao primario" type="button" data-restaurar-gasto>Restaurar</button></div>')
-      : '<div class="acoes"><button class="botao perigo" type="button" data-excluir-gasto>Excluir</button><button class="botao primario" type="button" data-editar-gasto>Editar</button></div>';
+      : '<p class="ver-dica-adm">Para mudar, toque no ✏️ lá em cima.</p>'; // v6
+    $('gasto-editar-btn').classList.toggle('oculto', !!r.excluido);
     $('gasto-corpo').innerHTML = html;
     return true;
   };
   $('gasto-corpo').addEventListener('click', async (e) => {
     const r = registroPorId(DADOS.id);
     if (!r) return;
-    if (e.target.closest('[data-editar-gasto]')) { ir('gasto-editar', { id: r.id }); return; }
-    if (e.target.closest('[data-excluir-gasto]')) {
-      const t = TIPO_REG[r.tipo] || ['', r.tipo];
-      if (!(await confirmar(`Excluir ${t[1].toLowerCase()} de ${dataDia(r.data)}${r.tipo === 'galeria' ? '' : ' (' + brl(r.valor) + ')'}, lançado por ${r.participante}? Vai para os Excluídos (30 dias para restaurar).`, 'Excluir', { perigo: true }))) return;
-      if (await tentar(chamar('admExcluirRegistro', r.id), 'Gasto excluído.')) { voltar(); await carregar(); }
-      return;
-    }
+
     if (e.target.closest('[data-restaurar-gasto]')) {
       if (await tentar(chamar('admRestaurarRegistro', r.id), 'Gasto restaurado.')) await carregar();
     }
   });
+
+  $('gasto-editar-btn').onclick = () => { if (TELA === 'gasto') ir('gasto-editar', { id: DADOS.id, deVer: true }); };
 
   // ---------------- Gasto do veículo (editar) ----------------
   RENDER['gasto-editar'] = ({ id }) => {
@@ -1371,12 +1609,14 @@ const VERSAO_ADMIN = '5';
       `<label for="ge-desc">${r.tipo === 'manutencao' ? 'Nome da manutenção / descrição' : 'Descrição'}</label><textarea id="ge-desc" rows="3">${esc(r.descricao || '')}</textarea>` +
       (r.tipo === 'manutencao' && (r.itens || []).length ? `<p class="dica-txt">Os ${r.itens.length === 1 ? '1 item' : r.itens.length + ' itens'} (serviços e peças) não mudam aqui: quem lançou muda no app.</p>` : '') +
       (ab && Number(r.desconto) > 0 ? `<p class="dica-txt">O valor é o valor pago (já com o desconto de ${brl(r.desconto)}).</p>` : '') +
-      '<div class="acoes" style="margin:18px 0"><button class="botao" type="button" data-voltar-form>Cancelar</button><button class="botao primario" type="button" id="ge-salvar">Salvar</button></div></div>';
+      '<div class="acoes" style="margin:18px 0 10px"><button class="botao" type="button" data-voltar-form>Cancelar</button><button class="botao primario" type="button" id="ge-salvar">Salvar</button></div>' +
+      '<button class="botao perigo largo-adm" type="button" id="ge-excluir">Excluir ' + esc(t[1].toLowerCase()) + '</button></div>';
     $('gasto-editar-corpo').innerHTML = html;
     return true;
   };
   $('gasto-editar-corpo').addEventListener('click', async (e) => {
     if (e.target.closest('[data-voltar-form]')) { voltar(); return; }
+    if (e.target.id === 'ge-excluir') { if (await excluirGasto(DADOS.id)) history.go(DADOS.deVer ? -2 : -1); return; } // v6
     if (e.target.id !== 'ge-salvar') return;
     const r = registroPorId(DADOS.id);
     const q = (id) => $(id);
@@ -2198,7 +2438,8 @@ const VERSAO_ADMIN = '5';
     'veiculo-editar': ['A9', 'Editar veículo'], gasto: ['A10', 'Gasto do veículo'], 'gasto-editar': ['A11', 'Editar gasto do veículo'],
     entrar: ['A19', 'Entrar'],
     mais: ['A12', 'Mais'], lixo: ['A13', 'Lixeira'], melh: ['A14', 'Melhorias'], ia: ['A15', 'IA (uso e chave)'], listas: ['A16', 'Listas'],
-    convite: ['A17', 'Convite'], aparelhos: ['A18', 'Aparelhos conectados'], avisos: ['A20', 'Avisos no celular']
+    convite: ['A17', 'Convite'], aparelhos: ['A18', 'Aparelhos conectados'], avisos: ['A20', 'Avisos no celular'],
+    rel: ['A21', 'Relatório do veículo'], 'rel-gastos': ['A22', 'Relatório · Gastos'], 'rel-desempenho': ['A23', 'Relatório · Desempenho'], 'rel-pneus': ['A24', 'Relatório · Pneus']
   };
   const SVG_BUG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M20 8h-2.81a5.985 5.985 0 0 0-1.82-1.96L17 4.41 15.59 3l-2.17 2.17a6.002 6.002 0 0 0-2.83 0L8.41 3 7 4.41l1.62 1.63C7.88 6.55 7.26 7.22 6.81 8H4v2h2.09c-.05.33-.09.66-.09 1v1H4v2h2v1c0 .34.04.67.09 1H4v2h2.81c1.04 1.79 2.97 3 5.19 3s4.15-1.21 5.19-3H20v-2h-2.09c.05-.33.09-.66.09-1v-1h2v-2h-2v-1c0-.34-.04-.67-.09-1H20V8zm-4 7c0 2.21-1.79 4-4 4s-4-1.79-4-4v-4c0-2.21 1.79-4 4-4s4 1.79 4 4v4zm-6-1h4v2h-4v-2zm0-4h4v2h-4v-2z"/></svg>';
   function telaMelhoria() {
@@ -2455,5 +2696,9 @@ const VERSAO_ADMIN = '5';
     mostrarEntrar();
   }
   // para os testes
-  window.Admin = { tela: () => TELA, dados: () => D, carregar, ir, irAba, Digital };
+  window.Admin = {
+    tela: () => TELA, dados: () => D, carregar, ir, irAba, Digital,
+    // v6: usados pela ponte do relatório (rel-ponte.js)
+    dadosTela: () => DADOS, voltar, aviso, chamar, voltarSemDesenhar: () => { ignorarPop++; history.back(); }
+  };
 })();

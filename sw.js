@@ -4,7 +4,7 @@
 //  Ao publicar uma versão nova, aumente o número abaixo.
 //  Só mexe nos caches que começam com "admin-" (os do app das pessoas ficam).
 // =====================================================================
-const VERSAO = 'admin-v5';
+const VERSAO = 'admin-v6';
 // v5: o pedido do 🐞 vai mesmo com o app fechado (quando a internet voltar) e os avisos no celular
 try { importScripts('./config.js', './admin-fundo.js'); } catch (e) { /* sem o segundo plano */ }
 const ARQUIVOS = [
@@ -16,6 +16,11 @@ const ARQUIVOS = [
   './trava.js',
   './gravador.js',
   './admin-fundo.js',
+  './rel-ponte.js', // v6: relatório do veículo (as telas do app)
+  './rel/relatorio.js',
+  './rel/pneus.js',
+  './rel/exportar.js',
+  './rel/rel-app.css',
   './vendor/html2canvas.min.js',
   './manifest.webmanifest',
   './icones/icone-192.png',

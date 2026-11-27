@@ -10,6 +10,7 @@
   <link rel="icon" href="icones/icone-192.png">
   <link rel="apple-touch-icon" href="icones/icone-192.png">
   <link rel="stylesheet" href="estilo.css">
+  <link rel="stylesheet" href="rel/rel-app.css">
 </head>
 <body>
   <!-- ============ ENTRAR (senha do painel) ============ -->
@@ -73,7 +74,7 @@
     <header class="topo">
       <button class="botao-icone" data-voltar type="button" aria-label="Voltar">←</button>
       <div class="topo-textos"><div class="topo-titulo" id="lanc-ver-titulo">Lançamento</div><div class="topo-sub" id="lanc-ver-sub"></div></div>
-      <span></span>
+      <button class="botao-icone lapis-topo oculto" id="lanc-ver-editar" type="button" aria-label="Editar" title="Editar">✏️</button>
     </header>
     <div id="lanc-ver-corpo"></div>
   </section>
@@ -105,7 +106,7 @@
     <header class="topo">
       <button class="botao-icone" data-voltar type="button" aria-label="Voltar">←</button>
       <div class="topo-textos"><div class="topo-titulo" id="gasto-titulo">Gasto do veículo</div><div class="topo-sub" id="gasto-sub"></div></div>
-      <span></span>
+      <button class="botao-icone lapis-topo oculto" id="gasto-editar-btn" type="button" aria-label="Editar" title="Editar">✏️</button>
     </header>
     <div id="gasto-corpo"></div>
   </section>
@@ -196,10 +197,54 @@
   <div id="carregando" class="carregando-adm oculto"></div>
   <div id="toast" class="toast oculto"></div>
 
+  <!-- v6: Relatório do veículo (as mesmas telas do app; relatorio.js, pneus.js e exportar.js vêm do app) -->
+  <section id="tela-rel" class="tela oculto">
+    <header class="topo">
+      <button class="botao-icone" id="rl-voltar" type="button" aria-label="Voltar">←</button>
+      <div class="topo-textos"><div class="topo-titulo">Relatório</div><div class="topo-sub" id="rl-sub"></div></div>
+      <span></span>
+    </header>
+    <div class="rel-app"><div class="conteudo"><div class="grade-opcoes" id="rl-opcoes">
+      <button class="opcao-grande" type="button" id="rl-gastos" data-rel="v-gastos"><span class="icone-grande">📊</span><b>Gastos</b><small>Lista e gráfico do que foi gasto no período</small></button>
+      <button class="opcao-grande" type="button" id="rl-desempenho" data-rel="v-desempenho"><span class="icone-grande">🚀</span><b>Desempenho</b><small>Km rodados, consumo e custo por km</small></button>
+      <button class="opcao-grande" type="button" id="rl-pneus" data-rel="v-pneus"><span class="icone-grande">🛞</span><b>Pneus</b><small>Quando cada pneu foi trocado e quanto durou</small></button>
+      <button class="opcao-grande exportar" type="button" id="rl-exportar"><span class="icone-grande">📥</span><span class="exp-ftexto"><b>Exportar planilha</b><small>Tudo numa planilha caprichada: gastos, abastecimentos, desempenho e gráficos</small></span></button>
+    </div></div></div>
+  </section>
+  <section id="tela-rel-gastos" class="tela oculto">
+    <header class="topo">
+      <button class="botao-icone" id="rg-voltar" type="button" aria-label="Voltar">←</button>
+      <div class="topo-textos"><div class="topo-titulo">Relatório · Gastos</div><div class="topo-sub" id="rg-sub"></div></div>
+      <span></span>
+    </header>
+    <div class="rel-app" id="tela-v-gastos"><div class="conteudo" id="rg-corpo"></div></div>
+  </section>
+  <section id="tela-rel-desempenho" class="tela oculto">
+    <header class="topo">
+      <button class="botao-icone" id="rd-voltar" type="button" aria-label="Voltar">←</button>
+      <div class="topo-textos"><div class="topo-titulo">Relatório · Desempenho</div><div class="topo-sub" id="rd-sub"></div></div>
+      <span></span>
+    </header>
+    <div class="rel-app"><div class="conteudo" id="rd-corpo"></div></div>
+  </section>
+  <section id="tela-rel-pneus" class="tela oculto">
+    <header class="topo">
+      <button class="botao-icone" id="rp-voltar" type="button" aria-label="Voltar">←</button>
+      <div class="topo-textos"><div class="topo-titulo">Relatório · Pneus</div><div class="topo-sub" id="rp-sub"></div></div>
+      <span></span>
+    </header>
+    <div class="rel-app"><div class="conteudo" id="rp-corpo"></div></div>
+  </section>
+  <div class="rel-app rel-dialogo" id="rel-dialogo"></div>
+
   <script src="config.js"></script>
   <script src="trava.js"></script>
   <script src="gravador.js"></script>
   <script src="admin-fundo.js"></script>
   <script src="admin.js"></script>
+  <script src="rel-ponte.js"></script>
+  <script src="rel/relatorio.js"></script>
+  <script src="rel/pneus.js"></script>
+  <script src="rel/exportar.js"></script>
 </body>
 </html>
